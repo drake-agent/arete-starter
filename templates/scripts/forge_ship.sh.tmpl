@@ -1,0 +1,183 @@
+#!/usr/bin/env bash
+set -e
+
+# forge_ship.sh — Commit → Version bump → Changelog → Push → Draft PR
+# Usage: forge_ship.sh --repo <path> --msg "<pr title>" [--patch|--minor|--major] [--dry-run]
+
+REPO=""
+MSG=""
+BUMP="patch"
+DRY_RUN=false
+
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --repo)   REPO="$2"; shift 2 ;;
+    --msg)    MSG="$2"; shift 2 ;;
+    --patch)  BUMP="patch"; shift ;;
+    --minor)  BUMP="minor"; shift ;;
+    --major)  BUMP="major"; shift ;;
+    --dry-run) DRY_RUN=true; shift ;;
+    *) echo "Unknown option: $1"; exit 1 ;;
+  esac
+done
+
+if [[ -z "$REPO" ]]; then
+  echo "ERROR: --repo <path> is required"
+  exit 1
+fi
+
+if [[ ! -d "$REPO/.git" ]]; then
+  echo "ERROR: $REPO is not a git repository"
+  exit 1
+fi
+
+cd "$REPO"
+BRANCH=$(git branch --show-current)
+echo "=== forge_ship: $REPO (branch: $BRANCH) ==="
+
+# ── Step 1: Auto-commit uncommitted changes ──
+if [[ -n $(git status --porcelain) ]]; then
+  echo "[1/6] Uncommitted changes detected — auto-committing..."
+  if $DRY_RUN; then
+    echo "  [dry-run] would: git add -A && git commit -m 'chore: pre-ship snapshot'"
+  else
+    git add -A
+    git commit -m "chore: pre-ship snapshot"
+  fi
+else
+  echo "[1/6] Working tree clean — no auto-commit needed."
+fi
+
+# ── Step 2: Extract new commits since origin/main ──
+echo "[2/6] Extracting new commits..."
+COMMITS=$(git log --oneline origin/main..HEAD 2>/dev/null || git log --oneline -10)
+COMMIT_COUNT=$(echo "$COMMITS" | grep -c . || echo 0)
+
+if [[ "$COMMIT_COUNT" -eq 0 ]]; then
+  echo "  No new commits since origin/main. Nothing to ship."
+  exit 0
+fi
+
+echo "  Found $COMMIT_COUNT new commit(s):"
+echo "$COMMITS" | sed 's/^/    /'
+
+# ── Step 3: Semver bump (if VERSION file exists) ──
+NEW_VERSION=""
+if [[ -f VERSION ]]; then
+  CURRENT=$(cat VERSION | tr -d '[:space:]')
+  IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
+  case $BUMP in
+    major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
+    minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
+    patch) PATCH=$((PATCH + 1)) ;;
+  esac
+  NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
+  echo "[3/6] VERSION bump: $CURRENT → $NEW_VERSION ($BUMP)"
+  if $DRY_RUN; then
+    echo "  [dry-run] would write $NEW_VERSION to VERSION"
+  else
+    echo "$NEW_VERSION" > VERSION
+  fi
+else
+  echo "[3/6] No VERSION file — skipping semver bump."
+fi
+
+# ── Step 4: Update CHANGELOG.md ──
+TODAY=$(date +%Y-%m-%d)
+CHANGELOG_ENTRY="## [$TODAY]"
+if [[ -n "$NEW_VERSION" ]]; then
+  CHANGELOG_ENTRY="## [${NEW_VERSION}] — $TODAY"
+fi
+
+CHANGELOG_BODY=""
+while IFS= read -r line; do
+  HASH="${line%% *}"
+  DESC="${line#* }"
+  CHANGELOG_BODY="${CHANGELOG_BODY}\n- ${DESC} (\`${HASH}\`)"
+done <<< "$COMMITS"
+
+if [[ -f CHANGELOG.md ]]; then
+  echo "[4/6] Updating CHANGELOG.md..."
+  if $DRY_RUN; then
+    echo "  [dry-run] would prepend section: $CHANGELOG_ENTRY"
+    printf "  [dry-run] entries:$CHANGELOG_BODY\n"
+  else
+    TMPFILE=$(mktemp)
+    {
+      echo "$CHANGELOG_ENTRY"
+      printf "%b\n" "$CHANGELOG_BODY"
+      echo ""
+      cat CHANGELOG.md
+    } > "$TMPFILE"
+    mv "$TMPFILE" CHANGELOG.md
+  fi
+else
+  echo "[4/6] Creating CHANGELOG.md..."
+  if $DRY_RUN; then
+    echo "  [dry-run] would create CHANGELOG.md with section: $CHANGELOG_ENTRY"
+    printf "  [dry-run] entries:$CHANGELOG_BODY\n"
+  else
+    {
+      echo "# Changelog"
+      echo ""
+      echo "$CHANGELOG_ENTRY"
+      printf "%b\n" "$CHANGELOG_BODY"
+    } > CHANGELOG.md
+  fi
+fi
+
+# ── Step 5: Commit VERSION/CHANGELOG changes ──
+if $DRY_RUN; then
+  echo "[5/6] [dry-run] would commit VERSION/CHANGELOG updates"
+else
+  if [[ -n $(git status --porcelain) ]]; then
+    echo "[5/6] Committing VERSION/CHANGELOG updates..."
+    git add VERSION CHANGELOG.md 2>/dev/null || git add CHANGELOG.md
+    COMMIT_MSG="chore: bump"
+    [[ -n "$NEW_VERSION" ]] && COMMIT_MSG="chore: bump v${NEW_VERSION}"
+    git commit -m "$COMMIT_MSG"
+  else
+    echo "[5/6] No VERSION/CHANGELOG changes to commit."
+  fi
+fi
+
+# ── Step 6: Push + Draft PR ──
+PR_URL=""
+if $DRY_RUN; then
+  echo "[6/6] [dry-run] would: git push origin HEAD"
+  if command -v gh &>/dev/null; then
+    PR_TITLE="${MSG:-Ship $BRANCH}"
+    echo "  [dry-run] would: gh pr create --title \"$PR_TITLE\" --fill --draft"
+  else
+    echo "  [dry-run] gh CLI not found. Would push only."
+  fi
+else
+  echo "[6/6] Pushing..."
+  git push origin HEAD
+
+  if command -v gh &>/dev/null; then
+    PR_TITLE="${MSG:-Ship $BRANCH}"
+    PR_URL=$(gh pr create --title "$PR_TITLE" --fill --draft 2>&1) || true
+    if echo "$PR_URL" | grep -q "https://"; then
+      PR_URL=$(echo "$PR_URL" | grep -o 'https://[^ ]*')
+    else
+      echo "  PR creation failed or already exists: $PR_URL"
+      PR_URL=""
+    fi
+  else
+    echo "  gh CLI not found. Push complete. Create PR manually."
+  fi
+fi
+
+# ── Summary ──
+echo ""
+echo "=============================="
+echo "  forge_ship complete"
+echo "------------------------------"
+echo "  Repo:    $REPO"
+echo "  Branch:  $BRANCH"
+echo "  Commits: $COMMIT_COUNT"
+[[ -n "$NEW_VERSION" ]] && echo "  Version: $NEW_VERSION"
+[[ -n "$PR_URL" ]] && echo "  PR:      $PR_URL"
+$DRY_RUN && echo "  Mode:    DRY-RUN (no changes made)"
+echo "=============================="

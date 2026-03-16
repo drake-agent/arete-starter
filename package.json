@@ -1,0 +1,30 @@
+{
+  "name": "create-arete-workspace",
+  "version": "0.1.0",
+  "description": "Set up an ARETE AI Operating System workspace in 5 minutes",
+  "type": "module",
+  "bin": {
+    "create-arete-workspace": "./bin/create.js",
+    "arete": "./bin/arete.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "files": [
+    "bin/",
+    "lib/",
+    "templates/"
+  ],
+  "keywords": [
+    "arete",
+    "ai",
+    "openclaw",
+    "agent",
+    "workspace"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "chalk": "^5.3.0",
+    "inquirer": "^9.2.0"
+  }
+}

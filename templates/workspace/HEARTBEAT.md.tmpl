@@ -1,0 +1,23 @@
+# HEARTBEAT.md - Active Task Monitoring
+
+## Recursive Health Check
+1. **Memory Persistence**: Ensure all `[SAVE]` requests from the previous hour are committed to `memory/`.
+2. **Context Management (Auto-Compaction)**:
+   - **Cron (every 2 hours)**: `scripts/memory_maintenance.sh` auto-runs
+     - 7+ day daily logs → `memory/archive/YYYY-MM/`
+     - Checkpoint/heartbeat dedup cleanup
+     - New checkpoint creation (only if none in last hour)
+   - **Line count trigger**: MEMORY.md Anti-Bloat Rules
+   - **Sub-agents**: Follow `AGENTS.md` § Sub-Agent Policy → Sub-Agent Memory Rules
+3. **Pending Items Scan**: Scan `MEMORY.md` § Pending Items:
+   - High priority items stale >48 hours → alert user
+   - "User action needed" items stale >3 days → reminder
+   - Completed items → remove from table immediately
+   - Over 15 items → move low-priority to daily log
+4. **Agent Score**: Run `npx agentlinter` daily. Report if score drops below 85.
+
+## System Health Checks (Cron-Automated)
+5. **Disk Space**: <20GB warning, <10GB critical (weekly Sunday 02:00)
+6. **Cron Health**: `jobs.json` consecutiveErrors > 2 → alert (every 30min)
+7. **Gateway Health**: Error log review, last 24 hours (daily 23:00)
+8. **Memory Synthesis**: Weekly daily notes → MEMORY.md synthesis (Sunday 03:40)

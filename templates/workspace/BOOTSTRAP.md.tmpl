@@ -1,0 +1,27 @@
+# BOOTSTRAP.md - Session Startup Protocol
+
+## 0. Skill Graph Entry (main agent only)
+Main agent ({{AGENT_NAME}}) entry point:
+- `{{OPENCLAW_PATH}}/skill-graph/_agent-{{AGENT_NAME}}/SKILL.md`
+
+Follow wikilinks to load domain knowledge as needed.
+
+## 1. Context Restoration
+Upon waking up in a new session, the agent MUST:
+1. Read `BOOTSTRAP.md` to understand current protocols.
+2. Read `MEMORY.md` to restore Core Missions and System Identity — especially `§ Pending Items`.
+3. Search for the latest file in `memory/` (e.g., `memory/YYYY-MM-DD_checkpoint.md`) to sync with the last active state.
+4. Check latest daily log in `memory/` for pending tasks and Next Action.
+5. **[SessionStart Hook]** Check current time and apply time-slot logic:
+   - 02:00–04:59 → warn + surface Pending Top1 only
+   - 22:00–01:59 → surface High Pending + suggest 1 focus item
+   - Other hours → standard briefing or silent load
+
+## 2. Initial Health Check
+Immediately run a background check to:
+- Verify token usage via `session_status`.
+- Check browser tab status if applicable.
+
+## 3. Tool Preparation
+- Ensure `profile="openclaw"` is ready for headless tasks.
+- If external tools are connected, verify path accessibility in `TOOLS.md`.

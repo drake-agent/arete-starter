@@ -1,0 +1,28 @@
+# TOOLS.md - Local Environment Configuration
+
+## Critical / MUST
+
+### Environment
+- Central `.env`: `{{OPENCLAW_PATH}}/.env` (API keys)
+- Workspace: `{{WORKSPACE_PATH}}`
+
+### Skill Gatekeeper
+Before installing any skill, verify it through the safe-install script:
+- **Install**: `bash scripts/safe-install.sh <slug>`
+- **Check only**: `bash scripts/safe-install.sh --check <slug>`
+- Never run `clawdhub install` directly
+
+### Skills
+Each skill has its own `SKILL.md` in the skills/ directory.
+
+## Standard / SHOULD
+
+### SSH
+(Add your SSH targets here)
+
+## Nice to Have / MAY
+(Add optional tools/services here)
+
+## Scope
+This file = local setup values only (paths, IDs, addresses).
+Skill docs → each skill's `SKILL.md`. Workflows → docs/.

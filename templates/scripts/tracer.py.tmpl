@@ -1,0 +1,266 @@
+#!/usr/bin/env python3
+"""
+Tracer Agent — Evidence-based causal reasoning tracker.
+
+Usage:
+    python3 scripts/tracer.py start      --id ID --symptom "..."
+    python3 scripts/tracer.py hypothesis --id ID --text "..." --confidence 0.7
+    python3 scripts/tracer.py evidence   --id ID --type for|against --text "..."
+    python3 scripts/tracer.py status     --id ID
+    python3 scripts/tracer.py conclude   --id ID --root-cause "..." --fix "..."
+    python3 scripts/tracer.py list
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+TRACES_DIR = Path("{{WORKSPACE_PATH}}/data/traces")
+MEMORY_MD = Path("{{WORKSPACE_PATH}}/MEMORY.md")
+
+LESSONS_HEADER = "## Lessons Learned"
+
+
+def _now() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _trace_path(trace_id: str) -> Path:
+    return TRACES_DIR / f"{trace_id}.json"
+
+
+def _load(trace_id: str) -> dict:
+    p = _trace_path(trace_id)
+    if not p.exists():
+        print(f"Error: Trace '{trace_id}' not found.")
+        sys.exit(1)
+    return json.loads(p.read_text(encoding="utf-8"))
+
+
+def _save(trace: dict) -> None:
+    TRACES_DIR.mkdir(parents=True, exist_ok=True)
+    p = _trace_path(trace["id"])
+    p.write_text(json.dumps(trace, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+# ── Commands ─────────────────────────────────────────────
+
+def cmd_start(args: argparse.Namespace) -> None:
+    p = _trace_path(args.id)
+    if p.exists():
+        print(f"Error: Trace '{args.id}' already exists.")
+        sys.exit(1)
+    trace = {
+        "id": args.id,
+        "symptom": args.symptom,
+        "status": "open",
+        "hypotheses": [],
+        "evidence": [],
+        "root_cause": None,
+        "fix": None,
+        "created_at": _now(),
+        "concluded_at": None,
+    }
+    _save(trace)
+    print(f"Trace '{args.id}' started.")
+    print(f"  Symptom: {args.symptom}")
+
+
+def cmd_hypothesis(args: argparse.Namespace) -> None:
+    trace = _load(args.id)
+    if trace["status"] == "concluded":
+        print(f"Warning: Trace '{args.id}' is already concluded.")
+        sys.exit(1)
+    h = {
+        "text": args.text,
+        "confidence": args.confidence,
+        "status": "active",
+        "added_at": _now(),
+    }
+    trace["hypotheses"].append(h)
+    _save(trace)
+    print(f"Hypothesis added (confidence={args.confidence}):")
+    print(f"  {args.text}")
+
+
+def cmd_evidence(args: argparse.Namespace) -> None:
+    trace = _load(args.id)
+    if trace["status"] == "concluded":
+        print(f"Warning: Trace '{args.id}' is already concluded.")
+        sys.exit(1)
+    e = {
+        "type": args.type,
+        "text": args.text,
+        "timestamp": _now(),
+    }
+    trace["evidence"].append(e)
+    _save(trace)
+    label = "FOR" if args.type == "for" else "AGAINST"
+    print(f"Evidence added [{label}]:")
+    print(f"  {args.text}")
+
+
+def _rank_hypotheses(trace: dict) -> list[dict]:
+    """Rank hypotheses by adjusted confidence = base confidence x evidence factor."""
+    evidence = trace["evidence"]
+    ranked = []
+    for h in trace["hypotheses"]:
+        n_for = sum(1 for e in evidence if e["type"] == "for")
+        n_against = sum(1 for e in evidence if e["type"] == "against")
+        total = n_for + n_against
+        if total > 0:
+            evidence_factor = (n_for - n_against) / total
+            adjusted = h["confidence"] * (1 + 0.3 * evidence_factor)
+            adjusted = max(0.0, min(1.0, adjusted))
+        else:
+            adjusted = h["confidence"]
+        ranked.append({**h, "adjusted_confidence": round(adjusted, 3)})
+    ranked.sort(key=lambda x: x["adjusted_confidence"], reverse=True)
+    return ranked
+
+
+def cmd_status(args: argparse.Namespace) -> None:
+    trace = _load(args.id)
+    evidence = trace["evidence"]
+    n_for = sum(1 for e in evidence if e["type"] == "for")
+    n_against = sum(1 for e in evidence if e["type"] == "against")
+
+    print(f"== Trace: {trace['id']} ==")
+    print(f"  Status   : {trace['status'].upper()}")
+    print(f"  Symptom  : {trace['symptom']}")
+    print(f"  Created  : {trace['created_at']}")
+    if trace["concluded_at"]:
+        print(f"  Concluded: {trace['concluded_at']}")
+    print(f"  Evidence : {len(evidence)} total ({n_for} for / {n_against} against)")
+    print("== Hypotheses (ranked) ==")
+
+    ranked = _rank_hypotheses(trace)
+    if not ranked:
+        print("  (none)")
+    for i, h in enumerate(ranked, 1):
+        status_icon = {"active": "o", "confirmed": "+", "rejected": "x"}.get(h["status"], "?")
+        print(f"  {i}. [{status_icon}] [{h['adjusted_confidence']:.2f}] {h['text']}")
+
+    if evidence:
+        print("== Evidence ==")
+        for e in evidence:
+            icon = "[FOR]" if e["type"] == "for" else "[AGAINST]"
+            print(f"  {icon} {e['text']}  ({e['timestamp']})")
+
+    if trace["root_cause"]:
+        print("== Conclusion ==")
+        print(f"  Root cause: {trace['root_cause']}")
+        print(f"  Fix: {trace['fix']}")
+
+
+def cmd_conclude(args: argparse.Namespace) -> None:
+    trace = _load(args.id)
+    if trace["status"] == "concluded":
+        print(f"Warning: Trace '{args.id}' is already concluded.")
+        sys.exit(1)
+
+    trace["status"] = "concluded"
+    trace["root_cause"] = args.root_cause
+    trace["fix"] = args.fix
+    trace["concluded_at"] = _now()
+
+    ranked = _rank_hypotheses(trace)
+    if ranked:
+        top_text = ranked[0]["text"]
+        for h in trace["hypotheses"]:
+            h["status"] = "confirmed" if h["text"] == top_text else "rejected"
+
+    _save(trace)
+    _append_lesson(trace)
+
+    print(f"Trace '{args.id}' concluded.")
+    print(f"  Root cause: {args.root_cause}")
+    print(f"  Fix: {args.fix}")
+    print(f"  Lesson appended to MEMORY.md")
+
+
+def _append_lesson(trace: dict) -> None:
+    """Append root_cause + fix to MEMORY.md Lessons Learned. APPEND ONLY."""
+    date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    lesson = f"- **[{trace['id']}]** {trace['root_cause']} -> {trace['fix']} ({date}).\n"
+
+    content = MEMORY_MD.read_text(encoding="utf-8")
+    lines = content.split("\n")
+
+    ll_idx = None
+    next_section_idx = None
+    for i, line in enumerate(lines):
+        if line.strip().startswith(LESSONS_HEADER):
+            ll_idx = i
+            continue
+        if ll_idx is not None and line.startswith("## ") and i > ll_idx:
+            next_section_idx = i
+            break
+
+    if ll_idx is None:
+        content += f"\n{LESSONS_HEADER}\n{lesson}"
+    else:
+        insert_at = next_section_idx if next_section_idx else len(lines)
+        while insert_at > ll_idx + 1 and lines[insert_at - 1].strip() == "":
+            insert_at -= 1
+        lines.insert(insert_at, lesson.rstrip())
+        content = "\n".join(lines)
+
+    MEMORY_MD.write_text(content, encoding="utf-8")
+
+
+def cmd_list(_args: argparse.Namespace) -> None:
+    if not TRACES_DIR.exists():
+        print("No traces yet.")
+        return
+    files = sorted(TRACES_DIR.glob("*.json"))
+    if not files:
+        print("No traces yet.")
+        return
+    print(f"{'ID':<30} {'Status':<12} {'Symptom'}")
+    print("-" * 80)
+    for f in files:
+        t = json.loads(f.read_text(encoding="utf-8"))
+        print(f"{t['id']:<30} {t['status']:<12} {t['symptom']}")
+
+
+# ── CLI ──────────────────────────────────────────────────
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Tracer Agent - Evidence-based causal tracking")
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    p_start = sub.add_parser("start", help="Start new trace")
+    p_start.add_argument("--id", required=True)
+    p_start.add_argument("--symptom", required=True)
+
+    p_hyp = sub.add_parser("hypothesis", help="Add hypothesis")
+    p_hyp.add_argument("--id", required=True)
+    p_hyp.add_argument("--text", required=True)
+    p_hyp.add_argument("--confidence", type=float, default=0.5)
+
+    p_ev = sub.add_parser("evidence", help="Add evidence")
+    p_ev.add_argument("--id", required=True)
+    p_ev.add_argument("--type", required=True, choices=["for", "against"])
+    p_ev.add_argument("--text", required=True)
+
+    p_st = sub.add_parser("status", help="Check status")
+    p_st.add_argument("--id", required=True)
+
+    p_con = sub.add_parser("conclude", help="Record conclusion")
+    p_con.add_argument("--id", required=True)
+    p_con.add_argument("--root-cause", required=True)
+    p_con.add_argument("--fix", required=True)
+
+    sub.add_parser("list", help="List all traces")
+
+    args = parser.parse_args()
+    {"start": cmd_start, "hypothesis": cmd_hypothesis, "evidence": cmd_evidence,
+     "status": cmd_status, "conclude": cmd_conclude, "list": cmd_list}[args.command](args)
+
+
+if __name__ == "__main__":
+    main()

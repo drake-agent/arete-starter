@@ -1,0 +1,237 @@
+#!/usr/bin/env bash
+set -e
+
+# forge_qa.sh — Diff-based visual QA via OpenClaw browser
+# Changed files → affected pages → screenshot capture
+
+###############################################################################
+# Config
+###############################################################################
+SCREENSHOT_DIR="/tmp/qa_screenshots"
+DATE_TAG=$(date +%Y%m%d)
+OPENCLAW_BIN=$(command -v openclaw || echo "/opt/homebrew/bin/openclaw")
+GATEWAY_PORT=4000
+
+###############################################################################
+# Usage
+###############################################################################
+usage() {
+  cat <<EOF
+Usage: $(basename "$0") --repo <path> [--url <base_url>] [--quick]
+
+Options:
+  --repo <path>       Git repo root (required)
+  --url <base_url>    Base URL for the app (default: http://localhost:3000)
+  --quick             Quick mode: home + 1 key page only
+  -h, --help          Show this help
+EOF
+  exit 0
+}
+
+###############################################################################
+# Parse args
+###############################################################################
+REPO=""
+BASE_URL=""
+QUICK=false
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --repo)   REPO="$2"; shift 2 ;;
+    --url)    BASE_URL="$2"; shift 2 ;;
+    --quick)  QUICK=true; shift ;;
+    -h|--help) usage ;;
+    *) echo "Unknown option: $1"; usage ;;
+  esac
+done
+
+if [[ -z "$REPO" ]]; then
+  echo "ERROR: --repo is required"
+  usage
+fi
+
+if [[ ! -d "$REPO/.git" ]]; then
+  echo "ERROR: $REPO is not a git repository"
+  exit 1
+fi
+
+###############################################################################
+# Auto-detect base URL
+###############################################################################
+if [[ -z "$BASE_URL" ]]; then
+  BASE_URL="http://localhost:3000"
+  echo "Using default base URL: $BASE_URL"
+fi
+
+###############################################################################
+# Prepare screenshot dir
+###############################################################################
+mkdir -p "$SCREENSHOT_DIR"
+
+###############################################################################
+# Get changed files
+###############################################################################
+echo ""
+echo "=== Diff Analysis ==="
+CHANGED_FILES=$(cd "$REPO" && git diff --name-only origin/main..HEAD 2>/dev/null || true)
+
+if [[ -z "$CHANGED_FILES" ]]; then
+  CHANGED_FILES=$(cd "$REPO" && git diff --name-only HEAD 2>/dev/null || true)
+fi
+
+if [[ -z "$CHANGED_FILES" ]]; then
+  echo "No changed files detected. Nothing to QA."
+  exit 0
+fi
+
+FILE_COUNT=$(echo "$CHANGED_FILES" | wc -l | tr -d ' ')
+echo "Changed files ($FILE_COUNT):"
+echo "$CHANGED_FILES" | sed 's/^/  /'
+
+###############################################################################
+# Map changed files → affected routes
+###############################################################################
+declare -a PAGES=()
+declare -a PAGE_NAMES=()
+
+add_page() {
+  local route="$1"
+  local name="$2"
+  for existing in "${PAGES[@]}"; do
+    [[ "$existing" == "$route" ]] && return
+  done
+  PAGES+=("$route")
+  PAGE_NAMES+=("$name")
+}
+
+# Always include home
+add_page "/" "home"
+
+while IFS= read -r file; do
+  [[ -z "$file" ]] && continue
+
+  # App router pages → direct route
+  if [[ "$file" =~ ^(web/)?(src/)?app/(.+)/page\.(tsx|ts|jsx|js)$ ]]; then
+    route="/${BASH_REMATCH[3]}"
+    route=$(echo "$route" | sed 's|/\(([^)]*)\)||g; s|//|/|g')
+    name=$(echo "$route" | tr '/' '_' | sed 's/^_//')
+    [[ -z "$name" ]] && name="root"
+    add_page "$route" "$name"
+    continue
+  fi
+
+  # Layout/template changes → affected route
+  if [[ "$file" =~ ^(web/)?(src/)?app/(.+)/(layout|template)\.(tsx|ts|jsx|js)$ ]]; then
+    route="/${BASH_REMATCH[3]}"
+    route=$(echo "$route" | sed 's|/\(([^)]*)\)||g; s|//|/|g')
+    name=$(echo "$route" | tr '/' '_' | sed 's/^_//; s/$/_layout/')
+    add_page "$route" "$name"
+    continue
+  fi
+
+  # Global CSS → home
+  if [[ "$file" =~ \.(css|scss|sass)$ ]] && [[ "$file" =~ global ]]; then
+    add_page "/" "home"
+  fi
+
+done <<< "$CHANGED_FILES"
+
+###############################################################################
+# Quick mode: trim to home + 1 key page
+###############################################################################
+if $QUICK && [[ ${#PAGES[@]} -gt 2 ]]; then
+  PAGES=("${PAGES[0]}" "${PAGES[1]}")
+  PAGE_NAMES=("${PAGE_NAMES[0]}" "${PAGE_NAMES[1]}")
+  echo ""
+  echo "(--quick mode: limited to ${#PAGES[@]} pages)"
+fi
+
+echo ""
+echo "=== Pages to QA (${#PAGES[@]}) ==="
+for i in "${!PAGES[@]}"; do
+  echo "  ${PAGE_NAMES[$i]}  →  ${PAGES[$i]}"
+done
+
+###############################################################################
+# Screenshot helper
+###############################################################################
+take_screenshot() {
+  local url="$1"
+  local output_path="$2"
+
+  if [[ -x "$OPENCLAW_BIN" ]]; then
+    "$OPENCLAW_BIN" browser navigate "$url" --timeout 15000 2>/dev/null || true
+    "$OPENCLAW_BIN" browser wait --load networkidle --timeout-ms 10000 2>/dev/null || true
+    local result
+    result=$("$OPENCLAW_BIN" browser screenshot --json --full-page 2>/dev/null || echo '{"ok":false}')
+    local ok
+    ok=$(echo "$result" | python3 -c "import sys,json; print(json.load(sys.stdin).get('ok',False))" 2>/dev/null || echo "False")
+    if [[ "$ok" == "True" ]]; then
+      local media_path
+      media_path=$(echo "$result" | python3 -c "import sys,json; print(json.load(sys.stdin).get('path',''))" 2>/dev/null)
+      if [[ -n "$media_path" && -f "$media_path" ]]; then
+        cp "$media_path" "$output_path"
+        return 0
+      fi
+    fi
+  fi
+
+  echo "  WARNING: screenshot failed for $url"
+  return 1
+}
+
+###############################################################################
+# Capture screenshots
+###############################################################################
+echo ""
+echo "=== Capturing Screenshots ==="
+
+declare -a CAPTURED=()
+FAIL_COUNT=0
+
+if [[ -x "$OPENCLAW_BIN" ]]; then
+  "$OPENCLAW_BIN" browser start 2>/dev/null || true
+  sleep 1
+fi
+
+for i in "${!PAGES[@]}"; do
+  route="${PAGES[$i]}"
+  name="${PAGE_NAMES[$i]}"
+  url="${BASE_URL}${route}"
+  safe_name=$(echo "$name" | tr -cs 'a-zA-Z0-9_-' '_' | sed 's/_$//')
+  output_file="${SCREENSHOT_DIR}/${DATE_TAG}_${safe_name}.png"
+
+  echo -n "  [$((i+1))/${#PAGES[@]}] ${name} (${url}) ... "
+
+  if take_screenshot "$url" "$output_file"; then
+    echo "OK → $output_file"
+    CAPTURED+=("$output_file")
+  else
+    echo "FAIL"
+    FAIL_COUNT=$((FAIL_COUNT + 1))
+  fi
+done
+
+###############################################################################
+# Summary
+###############################################################################
+echo ""
+echo "========================================="
+echo "  Forge QA Summary"
+echo "========================================="
+echo "  Changed files:     $FILE_COUNT"
+echo "  Pages tested:      ${#PAGES[@]}"
+echo "  Screenshots OK:    ${#CAPTURED[@]}"
+echo "  Screenshots FAIL:  $FAIL_COUNT"
+echo "  Output dir:        $SCREENSHOT_DIR"
+echo ""
+
+if [[ ${#CAPTURED[@]} -gt 0 ]]; then
+  echo "  Screenshots:"
+  for f in "${CAPTURED[@]}"; do
+    echo "    $f"
+  done
+fi
+
+echo ""
+echo "========================================="

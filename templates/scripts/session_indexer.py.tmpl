@@ -1,0 +1,420 @@
+#!/usr/bin/env python3
+"""
+Session Auto-Indexer v2 — ARETE Memory System
+Session end → JSONL → memory/daily log auto-extraction
+
+v2 changes:
+- Domain agent support (configurable)
+- Topic session (-topic-*.jsonl) inclusion
+- Domain agents: result summary only (cron noise removed)
+- FORGE git log summary
+"""
+
+import json
+import os
+import sys
+import re
+import hashlib
+import subprocess
+from datetime import datetime, timezone, timedelta
+from pathlib import Path
+
+# ── Config ──────────────────────────────────────────────────────
+AGENTS_DIR = Path("{{OPENCLAW_PATH}}/agents")
+MEMORY_DIR = Path("{{WORKSPACE_PATH}}/memory")
+STATE_FILE  = MEMORY_DIR / ".session_indexer_state.json"
+KST = timezone(timedelta(hours=9))
+
+# Full conversation indexing (including user messages)
+FULL_INDEX_AGENTS = ["main"]
+
+# Domain agents: result summary only (last assistant messages)
+DOMAIN_AGENTS = {{DOMAIN_AGENTS_CONFIG}}
+
+# Include topic sessions
+INCLUDE_TOPIC_SESSIONS = True
+
+# Minimum user messages per session
+MIN_USER_MESSAGES = 2
+
+# FORGE git repository paths (add your project repos here)
+FORGE_REPOS = []
+
+# ── Utils ──────────────────────────────────────────────────────
+def load_state():
+    if STATE_FILE.exists():
+        return json.loads(STATE_FILE.read_text())
+    return {"indexed": {}, "forge_last_commit": {}}
+
+def save_state(state):
+    STATE_FILE.write_text(json.dumps(state, indent=2))
+
+def file_hash(path: Path) -> str:
+    return hashlib.md5(str(path.stat().st_mtime).encode()).hexdigest()[:8]
+
+def is_cron_session(first_user_text: str) -> bool:
+    cron_kw = [
+        "[cron:", "Read HEARTBEAT.md", "[HOOK-SESSION-IDLE]",
+        "Heartbeat prompt", "heartbeat poll",
+    ]
+    return any(kw in first_user_text for kw in cron_kw)
+
+def extract_text_from_content(content) -> str:
+    if isinstance(content, list):
+        return " ".join(
+            c.get("text", "")
+            for c in content
+            if isinstance(c, dict) and c.get("type") == "text"
+        ).strip()
+    elif isinstance(content, str):
+        return content.strip()
+    return ""
+
+def clean_metadata(text: str) -> str:
+    """Remove conversation info JSON blocks"""
+    text = re.sub(r'Conversation info \(untrusted metadata\):\s*```json.*?```', '', text, flags=re.DOTALL)
+    text = re.sub(r'Sender \(untrusted metadata\):\s*```json.*?```', '', text, flags=re.DOTALL)
+    return text.strip()
+
+def guard_text(text: str):
+    """Basic text sanitization. Replace with inbound_guard if available."""
+    class Result:
+        def __init__(self, t):
+            self.redacted_text = t
+            self.risk_level = "low"
+            self.warnings = []
+    return Result(text)
+
+# ── Full indexing (main) ──────────────────────────────────────────
+def extract_session_full(jsonl_path: Path) -> dict | None:
+    """Extract user-assistant conversation core from JSONL (main agent)"""
+    messages = []
+    session_ts = None
+
+    try:
+        with open(jsonl_path) as f:
+            for line in f:
+                obj = json.loads(line.strip())
+                t = obj.get("type")
+
+                if t == "session":
+                    session_ts = obj.get("timestamp")
+
+                elif t == "message":
+                    msg = obj.get("message", {})
+                    role = msg.get("role", "")
+                    content = msg.get("content", "")
+                    text = extract_text_from_content(content)
+
+                    if not text:
+                        continue
+                    if role == "user" and (
+                        "Read HEARTBEAT.md" in text or
+                        "[cron:" in text or
+                        "[HOOK-SESSION-IDLE]" in text or
+                        len(text) < 5
+                    ):
+                        continue
+                    if role == "assistant" and text in ("HEARTBEAT_OK", "NO_REPLY"):
+                        continue
+
+                    if role in ("user", "assistant"):
+                        clean = clean_metadata(text)
+                        if not clean:
+                            continue
+                        guarded = guard_text(clean[:800])
+                        messages.append({
+                            "role": role,
+                            "text": guarded.redacted_text,
+                            "risk": guarded.risk_level,
+                            "warnings": guarded.warnings,
+                        })
+
+    except Exception as e:
+        print(f"  Warning: parse failed {jsonl_path.name}: {e}", file=sys.stderr)
+        return None
+
+    user_msgs = [m for m in messages if m["role"] == "user"]
+    if len(user_msgs) < MIN_USER_MESSAGES:
+        return None
+
+    return {
+        "session_id": jsonl_path.stem,
+        "timestamp": session_ts,
+        "messages": messages,
+        "mode": "full",
+    }
+
+def summarize_session_full(session: dict, agent: str = "main") -> str:
+    ts = session.get("timestamp", "")
+    if ts:
+        dt = datetime.fromisoformat(ts.replace("Z", "+00:00")).astimezone(KST)
+        time_str = dt.strftime("%H:%M")
+    else:
+        time_str = "??"
+
+    label = "Agent" if agent == "main" else agent
+    lines = [f"### Session {session['session_id'][:8]} ({time_str} KST)"]
+
+    for msg in session["messages"]:
+        prefix = "**User**" if msg["role"] == "user" else f"**{label}**"
+        text = msg["text"]
+        if msg["role"] == "assistant" and len(text) > 400:
+            text = text[:400] + "..."
+        lines.append(f"{prefix}: {text}")
+
+    lines.append("")
+    return "\n".join(lines)
+
+# ── Domain agent summary indexing ────────────────────────────────
+def extract_session_domain(jsonl_path: Path, tag: str) -> dict | None:
+    """Domain agents: extract result summaries only"""
+    session_ts = None
+    first_user_text = ""
+    all_assistant_texts = []
+
+    try:
+        with open(jsonl_path) as f:
+            for line in f:
+                obj = json.loads(line.strip())
+                t = obj.get("type")
+
+                if t == "session":
+                    session_ts = obj.get("timestamp")
+
+                elif t == "message":
+                    msg = obj.get("message", {})
+                    role = msg.get("role", "")
+                    text = extract_text_from_content(msg.get("content", ""))
+
+                    if not text:
+                        continue
+
+                    if role == "user" and not first_user_text:
+                        first_user_text = text
+
+                    if role == "assistant" and text not in ("HEARTBEAT_OK", "NO_REPLY"):
+                        if len(text) > 20:
+                            all_assistant_texts.append(text)
+
+    except Exception as e:
+        print(f"  Warning: parse failed {jsonl_path.name}: {e}", file=sys.stderr)
+        return None
+
+    if not all_assistant_texts:
+        return None
+
+    last_assistant_texts = all_assistant_texts[-3:]
+
+    return {
+        "session_id": jsonl_path.stem,
+        "timestamp": session_ts,
+        "is_cron": is_cron_session(first_user_text),
+        "first_user": first_user_text[:100],
+        "results": last_assistant_texts,
+        "tag": tag,
+        "mode": "domain",
+    }
+
+def summarize_session_domain(session: dict) -> str:
+    ts = session.get("timestamp", "")
+    if ts:
+        dt = datetime.fromisoformat(ts.replace("Z", "+00:00")).astimezone(KST)
+        time_str = dt.strftime("%H:%M")
+    else:
+        time_str = "??"
+
+    tag = session.get("tag", "Agent")
+    session_type = "cron" if session.get("is_cron") else "direct"
+    lines = [f"### {tag} Session {session['session_id'][:8]} ({time_str} KST, {session_type})"]
+
+    for result in session["results"]:
+        if len(result) > 300:
+            result = result[:300] + "..."
+        lines.append(result)
+
+    lines.append("")
+    return "\n".join(lines)
+
+# ── FORGE git log summary ──────────────────────────────────────────
+def get_forge_git_summary(state: dict) -> str | None:
+    """Extract new commits from FORGE work repos"""
+    summaries = []
+
+    for repo in FORGE_REPOS:
+        repo = Path(repo)
+        if not repo.exists():
+            continue
+
+        repo_key = str(repo)
+        last_commit = state.get("forge_last_commit", {}).get(repo_key, "")
+
+        try:
+            result = subprocess.run(
+                ["git", "-C", str(repo), "log", "--oneline", "-10",
+                 "--format=%H|%s|%ai"],
+                capture_output=True, text=True, timeout=10
+            )
+            if result.returncode != 0:
+                continue
+
+            commits = []
+            for line in result.stdout.strip().split("\n"):
+                if not line:
+                    continue
+                parts = line.split("|", 2)
+                if len(parts) < 3:
+                    continue
+                sha, msg, date_str = parts
+                commits.append((sha[:8], msg, date_str))
+
+            if not commits:
+                continue
+
+            new_commits = []
+            for sha, msg, date_str in commits:
+                if sha == last_commit:
+                    break
+                new_commits.append((sha, msg, date_str))
+
+            if new_commits:
+                repo_name = repo.name
+                lines = [f"**FORGE [{repo_name}]** {len(new_commits)} new commits:"]
+                for sha, msg, _ in new_commits[:5]:
+                    lines.append(f"  - `{sha}` {msg}")
+                summaries.append("\n".join(lines))
+                state.setdefault("forge_last_commit", {})[repo_key] = commits[0][0]
+
+        except Exception as e:
+            print(f"  Warning: FORGE git log failed {repo}: {e}", file=sys.stderr)
+
+    if summaries:
+        return "\n\n".join(summaries)
+    return None
+
+# ── Daily log ──────────────────────────────────────────────────────
+def get_daily_log_path(date_str: str) -> Path:
+    MEMORY_DIR.mkdir(exist_ok=True)
+    return MEMORY_DIR / f"{date_str}.md"
+
+def append_to_daily_log(date_str: str, content: str):
+    path = get_daily_log_path(date_str)
+    header = f"\n## Auto-Indexed Sessions ({date_str})\n"
+    if path.exists():
+        existing = path.read_text()
+        if "## Auto-Indexed Sessions" not in existing:
+            with open(path, "a") as f:
+                f.write(header + content)
+        else:
+            with open(path, "a") as f:
+                f.write(content)
+    else:
+        path.write_text(header + content)
+
+# ── Session file collection ──────────────────────────────────────
+def collect_session_files(agent: str) -> list[Path]:
+    sessions_dir = AGENTS_DIR / agent / "sessions"
+    if not sessions_dir.exists():
+        return []
+
+    files = []
+    for f in sessions_dir.glob("*.jsonl*"):
+        if "deleted" in f.name or "reset" in f.name:
+            continue
+        if not f.name.endswith(".jsonl"):
+            continue
+        is_topic = "topic" in f.name
+        if is_topic and not INCLUDE_TOPIC_SESSIONS:
+            continue
+        files.append(f)
+
+    return sorted(files)
+
+# ── Main ──────────────────────────────────────────────────────
+def main():
+    state = load_state()
+    indexed = state["indexed"]
+    today = datetime.now(KST).strftime("%Y-%m-%d")
+
+    new_count = 0
+    skipped = 0
+
+    # 1. Full indexing agents (main)
+    for agent in FULL_INDEX_AGENTS:
+        for jsonl_file in collect_session_files(agent):
+            fhash = file_hash(jsonl_file)
+            fkey = f"{agent}/{jsonl_file.name}"
+
+            if indexed.get(fkey) == fhash:
+                skipped += 1
+                continue
+
+            session = extract_session_full(jsonl_file)
+            if not session:
+                indexed[fkey] = fhash
+                continue
+
+            ts = session.get("timestamp", "")
+            date_str = today
+            if ts:
+                try:
+                    dt = datetime.fromisoformat(ts.replace("Z", "+00:00")).astimezone(KST)
+                    date_str = dt.strftime("%Y-%m-%d")
+                except:
+                    pass
+
+            summary = summarize_session_full(session, agent)
+            append_to_daily_log(date_str, summary)
+
+            indexed[fkey] = fhash
+            new_count += 1
+            print(f"  Indexed: {agent}/{jsonl_file.stem[:12]} -> memory/{date_str}.md")
+
+    # 2. Domain agent summary indexing
+    for agent_name, config in DOMAIN_AGENTS.items():
+        if not isinstance(config, dict):
+            continue
+        tag = config.get("tag", agent_name)
+        for jsonl_file in collect_session_files(agent_name):
+            fhash = file_hash(jsonl_file)
+            fkey = f"{agent_name}/{jsonl_file.name}"
+
+            if indexed.get(fkey) == fhash:
+                skipped += 1
+                continue
+
+            session = extract_session_domain(jsonl_file, tag)
+            if not session:
+                indexed[fkey] = fhash
+                continue
+
+            ts = session.get("timestamp", "")
+            date_str = today
+            if ts:
+                try:
+                    dt = datetime.fromisoformat(ts.replace("Z", "+00:00")).astimezone(KST)
+                    date_str = dt.strftime("%Y-%m-%d")
+                except:
+                    pass
+
+            summary = summarize_session_domain(session)
+            append_to_daily_log(date_str, summary)
+
+            indexed[fkey] = fhash
+            new_count += 1
+            print(f"  Indexed: {agent_name}/{jsonl_file.stem[:12]} -> memory/{date_str}.md")
+
+    # 3. FORGE git log summary
+    forge_summary = get_forge_git_summary(state)
+    if forge_summary:
+        forge_block = f"\n### FORGE Work Summary\n{forge_summary}\n"
+        append_to_daily_log(today, forge_block)
+        new_count += 1
+        print(f"  Indexed: FORGE git summary -> memory/{today}.md")
+
+    save_state({"indexed": indexed, "forge_last_commit": state.get("forge_last_commit", {})})
+
+    print(f"\nDone: {new_count} new indexed, {skipped} skipped")
+
+if __name__ == "__main__":
+    main()
