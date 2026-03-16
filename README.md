@@ -16,6 +16,23 @@ npx create-arete-workspace
 - **Verify Loop**: Automatic implementation verification
 - **Tracer Agent**: Evidence-based bug causal tracking
 
+## 갓생OS
+
+Neuroscience-based habit & productivity dashboard powered by Obsidian.
+
+- **Dashboard**: Routines, goals, D-day, energy tracking, focus timer
+- **Obsidian Vault Backend**: All data stored as markdown with frontmatter
+- **Neuroscience Engine**: Ultradian rhythm scoring, habit stacking, Zeigarnik tracking
+- **Voice AI**: Eve voice assistant integration (OpenAI)
+- **Review System**: Weekly/monthly plan & retrospective
+
+```bash
+# Launch 갓생OS dashboard
+arete start
+```
+
+Runs on `http://localhost:3000` (Next.js dev server). Requires `VAULT_PATH` pointing to your Obsidian vault.
+
 ## Architecture
 
 ```
@@ -41,6 +58,9 @@ npx create-arete-workspace
 
 # Check status
 arete status
+
+# Launch 갓생OS dashboard
+arete start
 
 # Update framework only (config files protected)
 arete update

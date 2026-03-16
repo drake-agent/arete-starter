@@ -88,11 +88,49 @@ function cmdStatus() {
   console.log('');
 }
 
+function cmdStart() {
+  const workspacePath = resolve(homedir(), '.openclaw', 'workspace');
+  const gatsaengDir = join(workspacePath, 'gatsaeng-os');
+
+  if (!existsSync(gatsaengDir)) {
+    console.log(chalk.red('갓생OS not found. Run create-arete-workspace with 갓생OS enabled.'));
+    process.exit(1);
+  }
+
+  const pkgJson = join(gatsaengDir, 'package.json');
+  if (!existsSync(pkgJson)) {
+    console.log(chalk.red('갓생OS package.json not found.'));
+    process.exit(1);
+  }
+
+  // Check if node_modules exists, install if not
+  if (!existsSync(join(gatsaengDir, 'node_modules'))) {
+    console.log(chalk.blue('Installing 갓생OS dependencies...'));
+    try {
+      execSync('npm install', { cwd: gatsaengDir, stdio: 'inherit' });
+    } catch {
+      console.log(chalk.red('Failed to install dependencies.'));
+      process.exit(1);
+    }
+  }
+
+  console.log(chalk.green('Starting 갓생OS...'));
+  console.log(chalk.dim(`  ${gatsaengDir}`));
+  console.log('');
+
+  try {
+    execSync('npm run dev', { cwd: gatsaengDir, stdio: 'inherit' });
+  } catch {
+    // User ctrl-c — normal exit
+  }
+}
+
 function showHelp() {
   console.log('');
   console.log(chalk.bold('  arete') + ' — ARETE workspace manager');
   console.log('');
   console.log('  Commands:');
+  console.log('    start     Launch 갓생OS dashboard');
   console.log('    update    Update framework files (Layer 1 only)');
   console.log('    status    Show workspace status');
   console.log('    help      Show this help');
@@ -100,6 +138,9 @@ function showHelp() {
 }
 
 switch (command) {
+  case 'start':
+    cmdStart();
+    break;
   case 'update':
     cmdUpdate().catch((e) => {
       console.error(chalk.red('Update failed: ' + e.message));

@@ -1,0 +1,26 @@
+import { NextResponse } from 'next/server'
+import { getEntity, updateEntity, deleteEntity } from '@/lib/vault'
+import { milestoneSchema } from '@/lib/vault/schemas'
+import type { Milestone } from '@/types'
+
+export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
+  const item = await getEntity<Milestone>('milestones', id, milestoneSchema)
+  if (!item) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  return NextResponse.json(item.data)
+}
+
+export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
+  const body = await req.json()
+  const updated = await updateEntity<Milestone>('milestones', id, body)
+  if (!updated) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  return NextResponse.json(updated)
+}
+
+export async function DELETE(_: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
+  const ok = await deleteEntity('milestones', id)
+  if (!ok) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  return NextResponse.json({ ok: true })
+}

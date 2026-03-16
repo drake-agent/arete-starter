@@ -5,3 +5,9 @@ node_modules/
 *.pyc
 __pycache__/
 .DS_Store
+packages/gatsaeng-os/.next/
+packages/gatsaeng-os/node_modules/
+packages/gatsaeng-os/.env
+packages/gatsaeng-os/.env.local
+packages/gatsaeng-os/tsconfig.tsbuildinfo
+packages/gatsaeng-os/package-lock.json
