@@ -97,7 +97,7 @@ export function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
                   <Input
                     value={data.display_name}
                     onChange={e => update('display_name', e.target.value)}
-                    placeholder="Drake"
+                    placeholder="Your Name"
                     className="mt-1"
                     autoFocus
                   />

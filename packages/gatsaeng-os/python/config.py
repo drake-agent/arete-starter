@@ -50,6 +50,6 @@ LIMITS = {
     'MIN_REANALYSIS_WEEKS': 2,
 }
 
-# saju-helper workspace (for KB references)
-SAJU_HELPER_WORKSPACE = Path(os.path.expanduser('~/.openclaw/workspace-saju-helper'))
-SAJU_KB_PATH = Path(os.path.expanduser('~/Documents/saju-kb'))
+# Optional: timing/astrology workspace (configure your own path)
+# TIMING_HELPER_WORKSPACE = Path(os.path.expanduser('~/.openclaw/workspace-timing-helper'))
+# TIMING_KB_PATH = Path(os.path.expanduser('~/Documents/timing-kb'))

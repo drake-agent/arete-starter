@@ -13,6 +13,7 @@ Other agents: see BOOTSTRAP.md § 0 for agent-specific entry points.
 - **`[SEARCH:ARCHIVE]`**: Search historical memory files (7+ days old)
 - **`[PRUNE]`**: Review and compress memory files
 - **`[OPTIMIZE]`**: Run AgentLinter and self-correct
+- **`[TLDR]`**: Compress current conversation to a 3-bullet executive summary (context, decision needed, recommended action)
 
 ## Self-Improvement Protocol
 - On error → auto-record in `.learnings/`
@@ -51,6 +52,13 @@ User talks to {{AGENT_NAME}} only. {{AGENT_NAME}} routes to domain agents.
 - Runs on cron: domain agent results → memory/YYYY-MM-DD.md auto-append
 - {{AGENT_NAME}} reads today's daily log at session start to know all agent work results
 
+#### Memory Bridge Rules
+1. **Read before write**: Always check today's daily log before appending to avoid duplicates.
+2. **Cross-agent awareness**: When referencing another agent's output, cite the source session ID.
+3. **No blind forwarding**: Summarize domain agent results before passing to user — raw logs are noise.
+4. **Conflict resolution**: If two agents produce contradictory results, flag the conflict and present both. Never silently pick one.
+5. **Staleness guard**: Daily log entries older than 24 hours are context, not current state. Verify before acting on them.
+
 ### FORGE Completion Protocol
 After FORGE work completes, {{AGENT_NAME}} must:
 1. Run `git -C <repo> log --oneline -5` → verify commit summary
@@ -76,10 +84,14 @@ Before any code, Socratic questions to eliminate hidden assumptions:
 - "Is there something similar that already exists but isn't being used?"
 → Score clarity. Unclear → more questions. Clear → next step.
 
-**Steps 1-3: Analysis**
+**Steps 1-5: Find the Strategic Crux**
 1. **Real user problem**: "What's the actual problem behind this request?"
 2. **10-star version**: Current request = how many stars? Where's 10-star?
-3. **Mode selection** (user decides):
+3. **Assumption audit**: List every assumption behind this request. Rank by "if wrong, how catastrophic?"
+4. **Identify the crux**: The top-ranked assumption = the Strategic Crux. The single decision/assumption that determines success or failure.
+5. **Validate before building**: Design a test for the crux BEFORE any code. Crux fails → pivot or kill. No sunk-cost fallacy.
+
+**Mode selection** (user decides after crux is validated):
 
 | Mode | Position | When |
 |------|----------|------|
@@ -117,6 +129,12 @@ WHY
 WHAT
 - Exact deliverable expected
 - Expected output: scope, tests, commits, report format
+
+ACCEPTANCE CRITERIA
+- Given [precondition]
+- When [action]
+- Then [expected outcome]
+(Minimum 1 Given/When/Then per deliverable. No criteria = no spawn.)
 
 CONSTRAINTS
 - Absolute prohibitions / limits / quality bar

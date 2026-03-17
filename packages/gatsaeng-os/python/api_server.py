@@ -109,7 +109,7 @@ def get_ddays():
 
 @app.get('/api/timing/current')
 def get_current_timing():
-    """Get current month's saju timing context."""
+    """Get current month's timing context."""
     return vault_io.get_current_timing()
 
 

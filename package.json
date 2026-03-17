@@ -1,6 +1,6 @@
 {
   "name": "create-arete-workspace",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Set up an ARETE AI Operating System workspace in 5 minutes",
   "type": "module",
   "bin": {

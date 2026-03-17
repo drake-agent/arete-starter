@@ -54,15 +54,15 @@ export function DashboardGrid() {
       {/* Zeigarnik panel */}
       {activeWidgets.includes('zeigarnik') && <ZeigarnikPanel />}
 
-      {/* Saju motto banner */}
-      {profile?.saju_motto && (
+      {/* Personal motto banner */}
+      {profile?.motto && (
         <div className="border border-gatsaeng-purple/30 bg-gatsaeng-purple/5 rounded-lg px-4 py-3">
           <div className="text-[10px] uppercase tracking-wider text-gatsaeng-purple/60 mb-1">
-            사주 모토
+            모토
           </div>
-          <p className="text-sm text-foreground font-medium">{profile.saju_motto}</p>
-          {profile.saju_identity && (
-            <p className="text-xs text-muted-foreground mt-1">{profile.saju_identity}</p>
+          <p className="text-sm text-foreground font-medium">{profile.motto}</p>
+          {profile.identity && (
+            <p className="text-xs text-muted-foreground mt-1">{profile.identity}</p>
           )}
         </div>
       )}

@@ -70,6 +70,24 @@ arete update
 
 `arete update` only touches Layer 1 files (scripts, templates). Your personal configuration files (SOUL.md, AGENTS.md, MEMORY.md, USER.md, etc.) are never modified during updates.
 
+## Changelog
+
+### v0.3.0
+- **AGENTS.md**: Added "Find the Strategic Crux" 5-step process in Plan-CEO Review
+- **AGENTS.md**: Added `[TLDR]` command trigger for executive summaries
+- **AGENTS.md**: Added ACCEPTANCE CRITERIA (Given/When/Then) to spawn prompt template
+- **AGENTS.md**: Added Memory Bridge rules (read-before-write, cross-agent awareness, conflict resolution, staleness guard)
+- **SOUL.md**: Confrontation Rule, Accountability Rule, Upgrade Rule confirmed present
+- Removed hardcoded personal info from packages/ (genericized for starter kit)
+
+### v0.2.0
+- Initial public release with full ARETE workspace templates
+- 갓생OS dashboard with neuroscience engine
+- FORGE workflow, Tracer agent, Memory Bridge, session indexer
+
+### v0.1.0
+- Project scaffolding and CLI setup
+
 ## Requirements
 
 - Node.js 18+
