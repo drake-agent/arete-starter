@@ -318,3 +318,33 @@ export const LIMITS = {
   MAX_MILESTONES_PER_GOAL: 4,
   MIN_REANALYSIS_WEEKS: 2,
 } as const
+
+// ─── Meeting (미팅 인텔) ───
+export interface DrakeAction {
+  text: string
+  done: boolean
+}
+
+export interface PlaybookCandidate {
+  title?: string
+  domains?: string[]
+  transferability?: string
+  context?: string
+  signal?: string
+  diagnosis?: string
+  intervention?: string
+  observed_or_expected_outcome?: string
+  eaas_translation?: string
+  [key: string]: unknown
+}
+
+export interface Meeting {
+  fileId: string
+  title: string
+  date: string
+  duration: string
+  domains: string[]
+  drakeActions: DrakeAction[]
+  content?: string // deprecated: no longer returned by API (security)
+  playbooks: PlaybookCandidate[]
+}

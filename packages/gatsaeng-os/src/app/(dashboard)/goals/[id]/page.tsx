@@ -93,7 +93,7 @@ export default function GoalDetailPage({ params }: { params: Promise<{ id: strin
   }
 
   if (!goal) {
-    return <div className="max-w-3xl mx-auto animate-pulse"><div className="h-48 bg-card rounded-lg" /></div>
+    return <div className="max-w-3xl mx-auto animate-pulse"><div className="h-48 bg-card rounded-sm" /></div>
   }
 
   const progress = goal.target_value
@@ -114,7 +114,7 @@ export default function GoalDetailPage({ params }: { params: Promise<{ id: strin
       {/* Header */}
       <div className="flex items-start justify-between mb-6">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ backgroundColor: goal.color + '20' }}>
+          <div className="w-10 h-10 rounded-sm flex items-center justify-center" style={{ backgroundColor: goal.color + '20' }}>
             <Target className="w-5 h-5" style={{ color: goal.color }} />
           </div>
           <div>

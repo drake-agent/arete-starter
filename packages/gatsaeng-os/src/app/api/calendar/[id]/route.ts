@@ -6,7 +6,7 @@ import type { CalendarEvent } from '@/types'
 export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const entity = await getEntity<CalendarEvent>('calendar', id, calendarEventSchema)
-  if (!entity) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  if (!entity) return NextResponse.json({ error: 'not found' }, { status: 404 })
   return NextResponse.json(entity.data)
 }
 
@@ -14,11 +14,13 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   const { id } = await params
   const body = await request.json()
   const result = await updateEntity<CalendarEvent>('calendar', id, body)
+  if (!result) return NextResponse.json({ error: 'not found' }, { status: 404 })
   return NextResponse.json(result)
 }
 
 export async function DELETE(_: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  await deleteEntity('calendar', id)
+  const deleted = await deleteEntity('calendar', id)
+  if (!deleted) return NextResponse.json({ error: 'not found' }, { status: 404 })
   return NextResponse.json({ ok: true })
 }

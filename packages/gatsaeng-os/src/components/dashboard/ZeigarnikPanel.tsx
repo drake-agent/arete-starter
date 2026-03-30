@@ -20,14 +20,14 @@ export function ZeigarnikPanel() {
       <div className="w-full flex items-center justify-center p-4 text-center">
         <div>
           <div className="text-2xl mb-1">&#10003;</div>
-          <p className="text-xs text-muted-foreground">모두 완료!</p>
+          <p className="text-xs text-muted-foreground">All clear!</p>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="w-full bg-gatsaeng-red/10 border border-gatsaeng-red/30 rounded-lg px-4 py-3 flex items-center gap-3">
+    <div className="w-full bg-gatsaeng-red/10 border border-gatsaeng-red/30 rounded-sm px-4 py-3 flex items-center gap-3">
       <AlertCircle className="w-4 h-4 text-gatsaeng-red shrink-0" />
       <span className="text-sm text-foreground">
         <strong className="text-gatsaeng-red">{totalIncomplete}개</strong>의 미완성 항목이 기다리고 있습니다

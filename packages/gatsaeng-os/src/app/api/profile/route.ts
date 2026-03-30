@@ -4,7 +4,7 @@ import { profileSchema } from '@/lib/vault/schemas'
 import type { Profile } from '@/types'
 
 export async function GET() {
-  // Return full profile without schema filtering (allows custom fields)
+  // Return full profile without schema filtering (allows saju_motto etc.)
   const result = await getProfile()
   return NextResponse.json(result.data)
 }

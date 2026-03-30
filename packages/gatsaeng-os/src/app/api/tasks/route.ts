@@ -43,7 +43,7 @@ export async function GET(request: Request) {
     const order: Record<string, number> = { urgent: 0, high: 1, medium: 2, low: 3 }
     tasks.sort((a, b) => (order[a.priority] ?? 2) - (order[b.priority] ?? 2))
   } else {
-    tasks.sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
+    tasks.sort((a, b) => a.position - b.position)
   }
 
   return NextResponse.json(tasks)

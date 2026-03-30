@@ -4,7 +4,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { GripVertical, Calendar as CalendarIcon, Sparkles, Check } from 'lucide-react'
 import type { Task } from '@/types'
-import { forwardRef, useEffect, useRef, useState } from 'react'
+import { forwardRef, useState } from 'react'
 
 const LS_KEY = 'mc_delegated_task_ids'
 
@@ -50,11 +50,6 @@ export const TaskCard = forwardRef<HTMLDivElement, TaskCardProps>(
     const [delegateState, setDelegateState] = useState<'idle' | 'loading' | 'done' | 'error'>(
       () => typeof window !== 'undefined' && loadDelegated().has(task.id) ? 'done' : 'idle'
     )
-    const errorTimerRef = useRef<ReturnType<typeof setTimeout>>(null)
-
-    useEffect(() => {
-      return () => { if (errorTimerRef.current) clearTimeout(errorTimerRef.current) }
-    }, [])
 
     async function handleDelegate(e: React.MouseEvent) {
       e.stopPropagation()
@@ -76,7 +71,7 @@ export const TaskCard = forwardRef<HTMLDivElement, TaskCardProps>(
         setDelegateState('done')
       } catch {
         setDelegateState('error')
-        errorTimerRef.current = setTimeout(() => setDelegateState('idle'), 1500)
+        setTimeout(() => setDelegateState('idle'), 1500)
       }
     }
 

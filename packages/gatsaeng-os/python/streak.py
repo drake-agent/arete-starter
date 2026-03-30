@@ -10,16 +10,20 @@ def calculate_streak() -> dict:
     today = date.today()
     streak = 0
 
-    all_routines = vault_io.list_entities('routines')
-    active = [r for r in all_routines if r['data'].get('is_active')]
-
-    for days_ago in range(1, 365):
+    for days_ago in range(0, 365):
         check_date = today - timedelta(days=days_ago)
         d_str = check_date.isoformat()
+
+        # 오늘은 아직 진행 중이므로 skip
+        if days_ago == 0:
+            continue
 
         log = vault_io.get_entity_by_date('routine_logs', d_str)
         if not log or not log['data'].get('completions'):
             break
+
+        routines = vault_io.list_entities('routines')
+        active = [r for r in routines if r['data'].get('is_active')]
         day_of_week = check_date.isoweekday()
         scheduled = [
             r for r in active

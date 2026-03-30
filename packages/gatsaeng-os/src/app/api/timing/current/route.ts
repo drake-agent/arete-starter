@@ -56,8 +56,7 @@ export async function GET() {
     }
 
     return NextResponse.json(null, { status: 404 })
-  } catch (err) {
-    console.error('[timing/current]', err instanceof Error ? err.message : err)
+  } catch {
     return NextResponse.json(null, { status: 404 })
   }
 }

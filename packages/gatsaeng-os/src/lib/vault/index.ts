@@ -9,12 +9,6 @@ async function ensureDir(dirPath: string): Promise<void> {
   await fs.mkdir(dirPath, { recursive: true })
 }
 
-async function atomicWrite(filePath: string, content: string): Promise<void> {
-  const tmpPath = `${filePath}.tmp`
-  await fs.writeFile(tmpPath, content, 'utf-8')
-  await fs.rename(tmpPath, filePath)
-}
-
 export async function listEntities<T>(
   folder: FolderKey,
   schema?: ZodSchema<T>
@@ -29,7 +23,7 @@ export async function listEntities<T>(
     mdFiles.map(async (filename) => {
       const raw = await fs.readFile(path.join(dirPath, filename), 'utf-8')
       if (schema) {
-        const parsed = safeParseMarkdown<T>(raw, schema)
+        const parsed = safeParseMarkdown<T>(raw, schema, filename)
         if (!parsed) return null // skip files that don't match schema
         return { ...parsed, filename }
       }
@@ -41,12 +35,6 @@ export async function listEntities<T>(
   return all.filter((r): r is NonNullable<typeof r> => r !== null)
 }
 
-function matchesId(filename: string, id: string): boolean {
-  // Match patterns: prefix-{id}.md or just {id}.md
-  const name = filename.replace('.md', '')
-  return name === id || name.endsWith(`-${id}`)
-}
-
 export async function getEntity<T>(
   folder: FolderKey,
   id: string,
@@ -54,7 +42,7 @@ export async function getEntity<T>(
 ): Promise<{ data: T; content: string } | null> {
   const dirPath = FOLDERS[folder]
   const files = await fs.readdir(dirPath)
-  const target = files.find(f => f.endsWith('.md') && matchesId(f, id))
+  const target = files.find(f => f.includes(id) && f.endsWith('.md'))
 
   if (!target) return null
 
@@ -93,7 +81,7 @@ export async function createEntity<T extends object>(
   const filePath = path.join(dirPath, filename)
 
   const content = stringifyMarkdown(entityData as object, body)
-  await atomicWrite(filePath, content)
+  await fs.writeFile(filePath, content, 'utf-8')
 
   return entityData
 }
@@ -108,7 +96,7 @@ export async function createDateEntity<T extends object>(
 
   const filePath = path.join(dirPath, `${date}.md`)
   const content = stringifyMarkdown(data as object)
-  await atomicWrite(filePath, content)
+  await fs.writeFile(filePath, content, 'utf-8')
 
   return data
 }
@@ -121,7 +109,7 @@ export async function updateEntity<T extends object>(
 ): Promise<T | null> {
   const dirPath = FOLDERS[folder]
   const files = await fs.readdir(dirPath)
-  const target = files.find(f => f.endsWith('.md') && matchesId(f, id))
+  const target = files.find(f => f.includes(id) && f.endsWith('.md'))
 
   if (!target) return null
 
@@ -132,7 +120,7 @@ export async function updateEntity<T extends object>(
   const updated = { ...parsed.data, ...updates } as T
   const newBody = body !== undefined ? body : parsed.content
   const content = stringifyMarkdown(updated as object, newBody)
-  await atomicWrite(filePath, content)
+  await fs.writeFile(filePath, content, 'utf-8')
 
   return updated
 }
@@ -147,7 +135,7 @@ export async function updateDateEntity<T extends object>(
 
   const filePath = path.join(dirPath, `${date}.md`)
   const content = stringifyMarkdown(data as object)
-  await atomicWrite(filePath, content)
+  await fs.writeFile(filePath, content, 'utf-8')
 
   return data
 }
@@ -155,7 +143,7 @@ export async function updateDateEntity<T extends object>(
 export async function deleteEntity(folder: FolderKey, id: string): Promise<boolean> {
   const dirPath = FOLDERS[folder]
   const files = await fs.readdir(dirPath)
-  const target = files.find(f => f.endsWith('.md') && matchesId(f, id))
+  const target = files.find(f => f.includes(id) && f.endsWith('.md'))
 
   if (!target) return false
 

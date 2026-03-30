@@ -112,9 +112,9 @@ export default function NotesPage() {
               <div>
                 <Label>영역 (선택)</Label>
                 <Select name="area_id">
-                  <SelectTrigger><SelectValue placeholder="없음" /></SelectTrigger>
+                  <SelectTrigger><SelectValue placeholder="AWAITING INPUT" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">없음</SelectItem>
+                    <SelectItem value="">AWAITING INPUT</SelectItem>
                     {areas.map((a: { id: string; title: string }) => (
                       <SelectItem key={a.id} value={a.id}>{a.title}</SelectItem>
                     ))}
@@ -152,7 +152,7 @@ export default function NotesPage() {
 
       {isLoading ? (
         <div className="space-y-3">
-          {[1, 2, 3].map(i => <div key={i} className="h-16 bg-card rounded-lg animate-pulse" />)}
+          {[1, 2, 3].map(i => <div key={i} className="h-16 bg-card rounded-sm animate-pulse" />)}
         </div>
       ) : notes.length === 0 ? (
         <Card>

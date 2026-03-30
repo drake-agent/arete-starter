@@ -120,7 +120,7 @@ export default function GoalsPage() {
 
       {isLoading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {[1, 2, 3].map(i => <div key={i} className="h-40 bg-card rounded-lg animate-pulse" />)}
+          {[1, 2, 3].map(i => <div key={i} className="h-40 bg-card rounded-sm animate-pulse" />)}
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

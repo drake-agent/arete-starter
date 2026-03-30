@@ -30,14 +30,27 @@ export function parseMarkdown<T>(raw: string, schema?: ZodSchema<T>): ParsedFile
   return { data: coerced as T, content: content.trim() }
 }
 
-export function safeParseMarkdown<T>(raw: string, schema: ZodSchema<T>): ParsedFile<T> | null {
-  const { data, content } = matter(raw)
-  const coerced = coerceDates(data)
-  const result = schema.safeParse(coerced)
-  if (result.success) {
-    return { data: result.data, content: content.trim() }
+export function safeParseMarkdown<T>(
+  raw: string,
+  schema: ZodSchema<T>,
+  filename?: string,
+): ParsedFile<T> | null {
+  try {
+    const { data, content } = matter(raw)
+    const coerced = coerceDates(data)
+    const result = schema.safeParse(coerced)
+    if (result.success) {
+      return { data: result.data, content: content.trim() }
+    }
+    console.warn(
+      `[vault] Schema parse failed${filename ? ` for ${filename}` : ''}:`,
+      result.error.issues.slice(0, 3).map(i => `${i.path.join('.')}: ${i.message}`).join(', ')
+    )
+    return null
+  } catch (e) {
+    console.error('[vault] parseMarkdown failed:', e instanceof Error ? e.message : e)
+    return null
   }
-  return null
 }
 
 function stripUndefined(obj: unknown): unknown {
@@ -82,3 +95,9 @@ export function extractBodySections(content: string): Record<string, string> {
   return sections
 }
 
+export function buildBodyFromSections(sections: Record<string, string>): string {
+  return Object.entries(sections)
+    .filter(([, value]) => value)
+    .map(([key, value]) => `## ${key}\n${value}`)
+    .join('\n\n')
+}

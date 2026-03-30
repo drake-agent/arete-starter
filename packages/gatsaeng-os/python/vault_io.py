@@ -222,7 +222,7 @@ def read_profile() -> dict[str, Any]:
     """Read user profile."""
     if not PROFILE_PATH.exists():
         return {
-            'display_name': 'User',
+            'display_name': 'Drake',
             'level': 1,
             'total_score': 0,
             'longest_streak': 0,

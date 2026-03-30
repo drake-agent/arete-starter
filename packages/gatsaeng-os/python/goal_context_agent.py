@@ -123,8 +123,6 @@ def analyze_goal(goal_id: str) -> Optional[dict]:
         ],
     )
 
-    if not response.content:
-        return None
     text = response.content[0].text
 
     # Parse JSON from response

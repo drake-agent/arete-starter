@@ -1,9 +1,6 @@
 import path from 'path'
 
-if (!process.env.VAULT_PATH) {
-  throw new Error('VAULT_PATH environment variable is required. Set it to your Obsidian vault GatsaengOS folder.')
-}
-export const VAULT_PATH = process.env.VAULT_PATH
+export const VAULT_PATH = process.env.VAULT_PATH || '/Users/drake/.openclaw/EVE-obsidian/EVE/GatsaengOS'
 
 export const FOLDERS = {
   areas: path.join(VAULT_PATH, 'areas'),

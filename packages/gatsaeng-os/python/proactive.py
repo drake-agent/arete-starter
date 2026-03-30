@@ -57,9 +57,8 @@ def check_dday_warnings() -> list[dict]:
         d = m.get('d_day', 999)
         title = m.get('title', '?')
         progress = 0
-        target = m.get('target_value', 0)
-        if target > 0:
-            progress = round(m.get('current_value', 0) / target * 100)
+        if m.get('target_value', 0) > 0:
+            progress = round(m.get('current_value', 0) / m['target_value'] * 100)
 
         if d <= 0:
             alerts.append({

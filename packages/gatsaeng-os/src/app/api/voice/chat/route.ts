@@ -5,7 +5,7 @@ import { governorCheck, governorRecord, estimateCost } from '@/lib/llm-governor'
 const openai = new OpenAI()
 
 const SYSTEM_PROMPT =
-  '당신은 Eve입니다. 사용자의 EA(Executive Assistant)이자 Chief of Staff. 나긋나긋한 톤, 속은 칼. 응답은 한국어로, 3문장 이하로 간결하게. 음성 응답이므로 마크다운 없이 자연스러운 말투로.'
+  '당신은 Eve입니다. Drake의 EA(Executive Assistant)이자 Chief of Staff. 나긋나긋한 톤, 속은 칼. 응답은 한국어로, 3문장 이하로 간결하게. 음성 응답이므로 마크다운 없이 자연스러운 말투로.'
 
 export async function POST(req: NextRequest) {
   try {

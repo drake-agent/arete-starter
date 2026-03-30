@@ -81,7 +81,7 @@ export function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
         <Card className="border-border/50">
           <CardContent className="py-8 px-6">
             <div className="flex items-center gap-3 mb-6">
-              <div className="w-10 h-10 rounded-lg bg-gatsaeng-amber/10 flex items-center justify-center">
+              <div className="w-10 h-10 rounded-sm bg-gatsaeng-amber/10 flex items-center justify-center">
                 <StepIcon className="w-5 h-5 text-gatsaeng-amber" />
               </div>
               <div>
@@ -97,7 +97,7 @@ export function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
                   <Input
                     value={data.display_name}
                     onChange={e => update('display_name', e.target.value)}
-                    placeholder="Your Name"
+                    placeholder="Drake"
                     className="mt-1"
                     autoFocus
                   />

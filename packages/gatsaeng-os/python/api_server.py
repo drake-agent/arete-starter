@@ -1,6 +1,6 @@
 """FastAPI server for gatsaeng-os Python backend."""
 
-from fastapi import FastAPI, UploadFile, BackgroundTasks, HTTPException
+from fastapi import FastAPI, UploadFile, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
@@ -20,8 +20,8 @@ app = FastAPI(title='Gatsaeng OS API', version='1.0.0')
 app.add_middleware(
     CORSMiddleware,
     allow_origins=['http://localhost:3100', 'http://127.0.0.1:3100'],
-    allow_methods=['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allow_headers=['Content-Type', 'Authorization'],
+    allow_methods=['*'],
+    allow_headers=['*'],
 )
 
 
@@ -54,7 +54,7 @@ def complete_task(task_id: str):
     """Mark a project task as done."""
     task_data = vault_io.get_entity('tasks', task_id)
     if not task_data:
-        raise HTTPException(status_code=404, detail='Not found')
+        return {'error': 'Not found'}, 404
 
     vault_io.update_entity('tasks', task_id, {'status': 'done'})
     priority = task_data['data'].get('priority', 'medium')
@@ -93,7 +93,7 @@ def get_goal_analysis(goal_id: str):
     """Get cached goal analysis result."""
     goal = vault_io.read_goal(goal_id)
     if not goal:
-        raise HTTPException(status_code=404, detail='Not found')
+        return {'error': 'Not found'}, 404
     return {
         'ai_diagnosis': goal['data'].get('ai_diagnosis'),
         'ai_direction': goal['data'].get('ai_direction'),
@@ -109,7 +109,7 @@ def get_ddays():
 
 @app.get('/api/timing/current')
 def get_current_timing():
-    """Get current month's timing context."""
+    """Get current month's saju timing context."""
     return vault_io.get_current_timing()
 
 

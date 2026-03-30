@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Vault
-VAULT_PATH = Path(os.getenv('VAULT_PATH', os.path.expanduser('~/Documents/EVE-obsidian/EVE/GatsaengOS')))
+VAULT_PATH = Path(os.getenv('VAULT_PATH', os.path.expanduser('/Users/drake/.openclaw/EVE-obsidian/EVE/GatsaengOS')))
 
 # Folders
 FOLDERS = {
@@ -50,6 +50,6 @@ LIMITS = {
     'MIN_REANALYSIS_WEEKS': 2,
 }
 
-# Optional: timing/astrology workspace (configure your own path)
-# TIMING_HELPER_WORKSPACE = Path(os.path.expanduser('~/.openclaw/workspace-timing-helper'))
-# TIMING_KB_PATH = Path(os.path.expanduser('~/Documents/timing-kb'))
+# saju-helper workspace (for KB references)
+SAJU_HELPER_WORKSPACE = Path(os.path.expanduser('~/.openclaw/workspace-saju-helper'))
+SAJU_KB_PATH = Path(os.path.expanduser('/Users/drake/.openclaw/saju-kb'))

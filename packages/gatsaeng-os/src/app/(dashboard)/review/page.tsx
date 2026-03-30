@@ -416,7 +416,7 @@ export default function ReviewPage() {
               <CardContent className="py-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-gatsaeng-purple/10 flex items-center justify-center">
+                    <div className="w-10 h-10 rounded-sm bg-gatsaeng-purple/10 flex items-center justify-center">
                       <Calendar className="w-5 h-5 text-gatsaeng-purple" />
                     </div>
                     <div>

@@ -65,7 +65,7 @@ export default function AreasPage() {
                     <button
                       key={i}
                       onClick={() => setIcon(i)}
-                      className={`w-10 h-10 rounded-lg text-xl flex items-center justify-center transition-colors ${
+                      className={`w-10 h-10 rounded-sm text-xl flex items-center justify-center transition-colors ${
                         icon === i ? 'bg-primary/20 ring-2 ring-primary' : 'bg-card hover:bg-muted'
                       }`}
                     >
@@ -94,7 +94,7 @@ export default function AreasPage() {
 
       {isLoading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {[1, 2, 3].map(i => <div key={i} className="h-32 bg-card rounded-lg animate-pulse" />)}
+          {[1, 2, 3].map(i => <div key={i} className="h-32 bg-card rounded-sm animate-pulse" />)}
         </div>
       ) : areas.length === 0 ? (
         <Card>

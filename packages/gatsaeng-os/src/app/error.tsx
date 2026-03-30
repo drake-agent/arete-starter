@@ -16,9 +16,11 @@ export default function RootError({
   return (
     <div className="min-h-screen flex flex-col items-center justify-center gap-4 p-8 bg-black text-white">
       <h2 className="text-lg font-bold text-red-500">Application Error</h2>
-      <p className="text-xs text-red-400 bg-red-950/30 p-4 rounded-lg max-w-2xl overflow-auto">
+      <pre className="text-xs text-red-400 bg-red-950/30 p-4 rounded-sm max-w-2xl overflow-auto whitespace-pre-wrap">
         {error.message}
-      </p>
+        {'\n\n'}
+        {error.stack}
+      </pre>
       <button
         onClick={reset}
         className="px-4 py-2 rounded bg-white text-black text-sm font-semibold"

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useCallback } from 'react'
+import { useEffect, useRef } from 'react'
 import { WidgetWrapper } from './WidgetWrapper'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -22,7 +22,6 @@ export function FocusTimer() {
   const sessionType = useTimerStore(s => s.sessionType)
   const completedSessions = useTimerStore(s => s.completedSessions)
   const customMinutes = useTimerStore(s => s.customMinutes)
-  const startedAt = useTimerStore(s => s.startedAt)
   const start = useTimerStore(s => s.start)
   const pause = useTimerStore(s => s.pause)
   const reset = useTimerStore(s => s.reset)
@@ -31,37 +30,6 @@ export function FocusTimer() {
   const setCustomMinutes = useTimerStore(s => s.setCustomMinutes)
 
   const intervalRef = useRef<NodeJS.Timeout | null>(null)
-  const prevCompletedRef = useRef(completedSessions)
-
-  const saveFocusSession = useCallback(async (started: string, type: SessionType, custom: number) => {
-    const durationMap: Record<SessionType, number> = {
-      pomodoro_25: 25,
-      focus_90: 90,
-      deep_work: custom,
-    }
-    try {
-      await fetch('/api/logs/focus', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          session_type: type,
-          duration_minutes: durationMap[type],
-          completed: true,
-          started_at: started,
-          ended_at: new Date().toISOString(),
-        }),
-      })
-    } catch {
-      // silently fail — vault save is best-effort from dashboard widget
-    }
-  }, [])
-
-  useEffect(() => {
-    if (completedSessions > prevCompletedRef.current && startedAt) {
-      saveFocusSession(startedAt, sessionType, customMinutes)
-    }
-    prevCompletedRef.current = completedSessions
-  }, [completedSessions, startedAt, sessionType, customMinutes, saveFocusSession])
 
   useEffect(() => {
     if (isRunning) {

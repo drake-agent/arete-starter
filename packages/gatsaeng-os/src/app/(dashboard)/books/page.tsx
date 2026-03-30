@@ -148,7 +148,7 @@ export default function BooksPage() {
 
       {isLoading ? (
         <div className="space-y-3">
-          {[1, 2, 3].map(i => <div key={i} className="h-24 bg-card rounded-lg animate-pulse" />)}
+          {[1, 2, 3].map(i => <div key={i} className="h-24 bg-card rounded-sm animate-pulse" />)}
         </div>
       ) : filtered.length === 0 ? (
         <Card>

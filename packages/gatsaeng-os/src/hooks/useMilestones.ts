@@ -18,17 +18,18 @@ export function useMilestones(goalId?: string) {
 export function useMilestonesWithDDay(goalId?: string) {
   const query = useMilestones(goalId)
 
-  const withDDay = useMemo(() =>
-    (query.data ?? [])
-      .map(m => ({
-        ...m,
-        d_day: Math.ceil(
-          (new Date(m.due_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
-        ),
-      }))
-      .sort((a, b) => a.d_day - b.d_day),
-    [query.data]
-  )
+  const withDDay = useMemo(() => {
+    const items: MilestoneWithDDay[] = (query.data ?? []).map(m => ({
+      ...m,
+      d_day: Math.ceil(
+        (new Date(m.due_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+      ),
+    }))
+
+    // sort by d_day ascending (most urgent first)
+    items.sort((a, b) => a.d_day - b.d_day)
+    return items
+  }, [query.data])
 
   return { ...query, data: withDDay }
 }

@@ -102,7 +102,7 @@ export default function TasksPage() {
     if (todayTasks.length) groups.push({ label: `오늘 ${todayTasks.length}`, tasks: todayTasks })
     if (thisWeek.length) groups.push({ label: `다음 7일 ${thisWeek.length}`, tasks: thisWeek })
     if (later.length) groups.push({ label: `이후 ${later.length}`, tasks: later })
-    if (noDue.length) groups.push({ label: `마감일 없음 ${noDue.length}`, tasks: noDue })
+    if (noDue.length) groups.push({ label: `UNSCHEDULED ${noDue.length}`, tasks: noDue })
 
     return groups.length > 0 ? groups : null
   }, [tasks, view])
@@ -158,7 +158,7 @@ export default function TasksPage() {
                   <SelectValue placeholder="프로젝트" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">없음</SelectItem>
+                  <SelectItem value="">AWAITING INPUT</SelectItem>
                   {projects.map(p => (
                     <SelectItem key={p.id} value={p.id}>{p.title}</SelectItem>
                   ))}
@@ -189,7 +189,7 @@ export default function TasksPage() {
       {isLoading ? (
         <div className="space-y-2">
           {[1, 2, 3, 4].map(i => (
-            <div key={i} className="h-14 bg-card rounded-lg animate-pulse" />
+            <div key={i} className="h-14 bg-card rounded-sm animate-pulse" />
           ))}
         </div>
       ) : tasks.length === 0 ? (

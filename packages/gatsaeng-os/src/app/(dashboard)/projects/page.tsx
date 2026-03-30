@@ -125,7 +125,7 @@ export default function ProjectsPage() {
 
       {isLoading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {[1, 2].map(i => <div key={i} className="h-32 bg-card rounded-lg animate-pulse" />)}
+          {[1, 2].map(i => <div key={i} className="h-32 bg-card rounded-sm animate-pulse" />)}
         </div>
       ) : displayProjects.length === 0 ? (
         <Card>
@@ -167,7 +167,7 @@ export default function ProjectsPage() {
                   <div className="flex gap-2">
                     <Badge variant="outline">{project.default_view}</Badge>
                     {totalTasks === 0 && (
-                      <Badge variant="outline" className="text-muted-foreground">태스크 없음</Badge>
+                      <Badge variant="outline" className="text-muted-foreground">AWAITING INPUT</Badge>
                     )}
                   </div>
                 </CardContent>

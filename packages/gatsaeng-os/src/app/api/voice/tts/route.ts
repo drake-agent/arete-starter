@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server'
 import OpenAI from 'openai'
 
 const openai = new OpenAI()
+const MAX_TTS_CHARS = 1000
 
 export async function POST(req: NextRequest) {
   try {
@@ -11,6 +12,12 @@ export async function POST(req: NextRequest) {
         status: 400,
         headers: { 'Content-Type': 'application/json' },
       })
+    }
+    if (text.length > MAX_TTS_CHARS) {
+      return new Response(
+        JSON.stringify({ error: `텍스트는 ${MAX_TTS_CHARS}자 이하여야 합니다.` }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
+      )
     }
 
     const mp3 = await openai.audio.speech.create({

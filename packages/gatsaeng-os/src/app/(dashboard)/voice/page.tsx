@@ -143,7 +143,7 @@ export default function VoicePage() {
           >
             <div
               className={cn(
-                'max-w-[80%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed',
+                'max-w-[80%] rounded-sm px-4 py-2.5 text-sm leading-relaxed',
                 msg.role === 'user'
                   ? 'bg-muted text-foreground rounded-br-md'
                   : 'bg-primary/10 text-foreground rounded-bl-md'
@@ -173,7 +173,7 @@ export default function VoicePage() {
 
       {/* Error */}
       {error && (
-        <div className="mx-4 mb-2 text-center text-xs text-destructive bg-destructive/10 rounded-lg px-3 py-2">
+        <div className="mx-4 mb-2 text-center text-xs text-destructive bg-destructive/10 rounded-sm px-3 py-2">
           {error}
         </div>
       )}

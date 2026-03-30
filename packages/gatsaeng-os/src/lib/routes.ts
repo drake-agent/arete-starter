@@ -9,7 +9,5 @@ export const ENTITY_ROUTES: Record<string, string> = {
 
 /** Build href for an entity */
 export function entityHref(type: string, id: string): string {
-  const prefix = ENTITY_ROUTES[type]
-  if (!prefix) return '/'
-  return `${prefix}/${id}`
+  return `${ENTITY_ROUTES[type] ?? ''}/${id}`
 }

@@ -22,12 +22,12 @@ const WIDGETS: Partial<Record<WidgetId, React.ComponentType>> = {
   dday: DdayWidget,
   proactive: () => null, // rendered as top bar
   heatmap: () => (
-    <div className="border border-border rounded-lg p-6 text-center text-muted-foreground text-sm">
+    <div className="border border-border rounded-sm p-6 text-center text-muted-foreground text-sm">
       Activity Heatmap — coming soon
     </div>
   ),
   kanban: () => (
-    <div className="border border-border rounded-lg p-6 text-center text-muted-foreground text-sm">
+    <div className="border border-border rounded-sm p-6 text-center text-muted-foreground text-sm">
       Quick Kanban — coming soon
     </div>
   ),
@@ -54,15 +54,15 @@ export function DashboardGrid() {
       {/* Zeigarnik panel */}
       {activeWidgets.includes('zeigarnik') && <ZeigarnikPanel />}
 
-      {/* Personal motto banner */}
-      {profile?.motto && (
-        <div className="border border-gatsaeng-purple/30 bg-gatsaeng-purple/5 rounded-lg px-4 py-3">
+      {/* Saju motto banner */}
+      {profile?.saju_motto && (
+        <div className="border border-gatsaeng-purple/30 bg-gatsaeng-purple/5 rounded-sm px-4 py-3">
           <div className="text-[10px] uppercase tracking-wider text-gatsaeng-purple/60 mb-1">
-            모토
+            Drake가 잘 사는 법
           </div>
-          <p className="text-sm text-foreground font-medium">{profile.motto}</p>
-          {profile.identity && (
-            <p className="text-xs text-muted-foreground mt-1">{profile.identity}</p>
+          <p className="text-sm text-foreground font-medium">{profile.saju_motto}</p>
+          {profile.saju_identity && (
+            <p className="text-xs text-muted-foreground mt-1">{profile.saju_identity}</p>
           )}
         </div>
       )}

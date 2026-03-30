@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 
 def is_authorized(update: Update) -> bool:
-    """Only allow authorized user (chat_id from config)."""
+    """Only allow Drake (chat_id from config)."""
     if not TELEGRAM_CHAT_ID:
         return True
     return str(update.effective_chat.id) == TELEGRAM_CHAT_ID.replace('tg:', '')
@@ -111,9 +111,8 @@ async def cmd_dday(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         d = m.get('d_day', 0)
         label = f"D-{d}" if d > 0 else "D-Day" if d == 0 else f"D+{abs(d)}"
         progress = 0
-        target = m.get('target_value', 0)
-        if target > 0:
-            progress = round(m.get('current_value', 0) / target * 100)
+        if m.get('target_value', 0) > 0:
+            progress = round(m.get('current_value', 0) / m['target_value'] * 100)
         lines.append(f"  {label}: {m.get('title', '?')} ({progress}%)")
 
     await update.message.reply_text('\n'.join(lines))

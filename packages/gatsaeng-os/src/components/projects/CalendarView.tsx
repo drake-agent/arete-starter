@@ -78,7 +78,7 @@ export function CalendarView({ tasks, onClickTask }: CalendarViewProps) {
         </Button>
       </div>
 
-      <div className="grid grid-cols-7 gap-px bg-border rounded-lg overflow-hidden">
+      <div className="grid grid-cols-7 gap-px bg-border rounded-sm overflow-hidden">
         {DAY_NAMES.map(day => (
           <div key={day} className="bg-secondary/30 px-2 py-1.5 text-center text-xs font-medium text-muted-foreground">
             {day}

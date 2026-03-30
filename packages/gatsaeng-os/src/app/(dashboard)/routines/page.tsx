@@ -171,9 +171,9 @@ export default function RoutinesPage() {
               <div>
                 <Label>앞 루틴 (습관 스택킹)</Label>
                 <Select name="after_routine_id">
-                  <SelectTrigger><SelectValue placeholder="없음" /></SelectTrigger>
+                  <SelectTrigger><SelectValue placeholder="AWAITING INPUT" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">없음</SelectItem>
+                    <SelectItem value="">AWAITING INPUT</SelectItem>
                     {routines.map(r => (
                       <SelectItem key={r.id} value={r.id}>{r.title}</SelectItem>
                     ))}
@@ -212,7 +212,7 @@ export default function RoutinesPage() {
 
       {/* Daily Stats Bar */}
       {totalRoutines > 0 && (
-        <div className="flex items-center gap-4 mb-6 p-3 bg-card rounded-lg border border-border">
+        <div className="flex items-center gap-4 mb-6 p-3 bg-card rounded-sm border border-border">
           <div className="flex-1">
             <div className="flex justify-between text-xs text-muted-foreground mb-1.5">
               <span>오늘 진행률</span>
@@ -237,7 +237,7 @@ export default function RoutinesPage() {
 
       {isLoading ? (
         <div className="space-y-3">
-          {[1, 2, 3].map(i => <div key={i} className="h-16 bg-card rounded-lg animate-pulse" />)}
+          {[1, 2, 3].map(i => <div key={i} className="h-16 bg-card rounded-sm animate-pulse" />)}
         </div>
       ) : filteredChains.length === 0 ? (
         <Card>

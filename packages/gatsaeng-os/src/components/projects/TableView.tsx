@@ -84,27 +84,27 @@ export function TableView({ tasks, onClickTask, onUpdateTask }: TableViewProps) 
   const SortHeader = ({ label, sortKeyName }: { label: string; sortKeyName: SortKey }) => (
     <button
       onClick={() => toggleSort(sortKeyName)}
-      className="flex items-center gap-1 text-xs font-medium text-muted-foreground uppercase tracking-wider hover:text-foreground transition-colors"
+      className="flex min-h-[44px] items-center gap-1 text-xs font-medium uppercase tracking-wider text-muted-foreground transition-colors hover:text-foreground"
     >
       {label}
-      <ArrowUpDown className={`w-3 h-3 ${sortKey === sortKeyName ? 'text-primary' : ''}`} />
+      <ArrowUpDown className={`h-3 w-3 ${sortKey === sortKeyName ? 'text-primary' : ''}`} />
     </button>
   )
 
   return (
     <div>
-      <div className="flex gap-2 mb-4">
-        <div className="relative flex-1 max-w-xs">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+      <div className="mb-4 flex flex-col gap-2 sm:flex-row">
+        <div className="relative flex-1 sm:max-w-xs">
+          <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="검색..."
-            className="pl-8 h-8 text-sm"
+            className="h-10 pl-8 text-sm"
           />
         </div>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-28 h-8 text-xs"><SelectValue /></SelectTrigger>
+          <SelectTrigger className="h-10 w-full text-xs sm:w-28"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">전체 상태</SelectItem>
             <SelectItem value="backlog">Backlog</SelectItem>
@@ -114,7 +114,7 @@ export function TableView({ tasks, onClickTask, onUpdateTask }: TableViewProps) 
           </SelectContent>
         </Select>
         <Select value={priorityFilter} onValueChange={setPriorityFilter}>
-          <SelectTrigger className="w-28 h-8 text-xs"><SelectValue /></SelectTrigger>
+          <SelectTrigger className="h-10 w-full text-xs sm:w-28"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">전체 우선</SelectItem>
             <SelectItem value="urgent">긴급</SelectItem>
@@ -125,23 +125,23 @@ export function TableView({ tasks, onClickTask, onUpdateTask }: TableViewProps) 
         </Select>
       </div>
 
-      <div className="border border-border rounded-lg overflow-hidden">
-        <table className="w-full">
+      <div className="overflow-x-auto rounded-sm border border-border">
+        <table className="min-w-[720px] w-full">
           <thead>
             <tr className="border-b border-border bg-secondary/30">
-              <th className="text-left px-4 py-2.5">
+              <th className="px-4 py-2.5 text-left">
                 <SortHeader label="제목" sortKeyName="title" />
               </th>
-              <th className="text-left px-4 py-2.5 w-24">
+              <th className="w-24 px-4 py-2.5 text-left">
                 <SortHeader label="상태" sortKeyName="status" />
               </th>
-              <th className="text-left px-4 py-2.5 w-24">
+              <th className="w-24 px-4 py-2.5 text-left">
                 <SortHeader label="우선순위" sortKeyName="priority" />
               </th>
-              <th className="text-left px-4 py-2.5 w-20">
-                <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">에너지</span>
+              <th className="w-20 px-4 py-2.5 text-left">
+                <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">에너지</span>
               </th>
-              <th className="text-left px-4 py-2.5 w-28">
+              <th className="w-28 px-4 py-2.5 text-left">
                 <SortHeader label="마감일" sortKeyName="due_date" />
               </th>
             </tr>
@@ -149,7 +149,7 @@ export function TableView({ tasks, onClickTask, onUpdateTask }: TableViewProps) 
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground text-sm">
+                <td colSpan={5} className="px-4 py-8 text-center text-sm text-muted-foreground">
                   {search || statusFilter !== 'all' || priorityFilter !== 'all'
                     ? '필터에 맞는 태스크가 없습니다'
                     : '아직 태스크가 없습니다'}
@@ -159,13 +159,13 @@ export function TableView({ tasks, onClickTask, onUpdateTask }: TableViewProps) 
               filtered.map(task => (
                 <tr
                   key={task.id}
-                  className="border-b border-border/50 last:border-0 hover:bg-secondary/20 transition-colors cursor-pointer"
+                  className="cursor-pointer border-b border-border/50 transition-colors last:border-0 hover:bg-secondary/20"
                   onClick={() => onClickTask?.(task)}
                 >
                   <td className="px-4 py-2.5">
                     <div className="text-sm">{task.title}</div>
                     {task.tag && (
-                      <Badge variant="outline" className="text-[10px] mt-1">{task.tag}</Badge>
+                      <Badge variant="outline" className="mt-1 text-[10px]">{task.tag}</Badge>
                     )}
                   </td>
                   <td className="px-4 py-2.5">
@@ -175,7 +175,7 @@ export function TableView({ tasks, onClickTask, onUpdateTask }: TableViewProps) 
                         onUpdateTask({ id: task.id, status: v as TaskStatus })
                       }}
                     >
-                      <SelectTrigger className={`h-7 text-xs w-20 border-0 bg-transparent ${STATUS_COLORS[task.status]}`}>
+                      <SelectTrigger className={`h-9 w-20 border-0 bg-transparent text-xs ${STATUS_COLORS[task.status]}`}>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>

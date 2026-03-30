@@ -150,7 +150,7 @@ export default function FocusPage() {
                   onClick={() => handleTypeChange(p.type)}
                   disabled={isRunning}
                   className={cn(
-                    'px-4 py-2 rounded-lg text-sm font-medium transition-colors',
+                    'px-4 py-2 rounded-sm text-sm font-medium transition-colors',
                     selectedType === p.type
                       ? 'text-black'
                       : 'bg-secondary text-muted-foreground hover:text-foreground'

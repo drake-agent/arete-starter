@@ -64,7 +64,7 @@ function KanbanColumn({ column, tasks }: { column: typeof COLUMNS[number]; tasks
   return (
     <div
       ref={setNodeRef}
-      className={`flex-1 min-w-[240px] rounded-lg p-2 transition-colors ${
+      className={`flex-1 min-w-[240px] rounded-sm p-2 transition-colors ${
         isOver ? 'bg-primary/5 ring-1 ring-primary/20' : ''
       }`}
     >

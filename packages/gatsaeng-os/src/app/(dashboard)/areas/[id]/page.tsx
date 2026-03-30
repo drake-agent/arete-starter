@@ -49,7 +49,7 @@ export default function AreaDetailPage({ params }: { params: Promise<{ id: strin
   if (isLoading) {
     return (
       <div className="max-w-4xl mx-auto space-y-4">
-        {[1, 2, 3].map(i => <div key={i} className="h-24 bg-card rounded-lg animate-pulse" />)}
+        {[1, 2, 3].map(i => <div key={i} className="h-24 bg-card rounded-sm animate-pulse" />)}
       </div>
     )
   }

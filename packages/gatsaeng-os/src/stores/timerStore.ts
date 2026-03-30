@@ -16,7 +16,6 @@ interface TimerState {
   completedSessions: number
   energyLevelAtStart: number | null
   customMinutes: number
-  startedAt: string | null
   start: () => void
   pause: () => void
   reset: () => void
@@ -33,16 +32,12 @@ export const useTimerStore = create<TimerState>((set, get) => ({
   completedSessions: 0,
   energyLevelAtStart: null,
   customMinutes: 50,
-  startedAt: null,
-  start: () => {
-    const { startedAt } = get()
-    set({ isRunning: true, startedAt: startedAt ?? new Date().toISOString() })
-  },
+  start: () => set({ isRunning: true }),
   pause: () => set({ isRunning: false }),
   reset: () => {
     const { sessionType, customMinutes } = get()
     const secs = sessionType === 'deep_work' ? customMinutes * 60 : DURATIONS[sessionType]
-    set({ seconds: secs, isRunning: false, startedAt: null })
+    set({ seconds: secs, isRunning: false })
   },
   tick: () => {
     const { seconds, completedSessions } = get()

@@ -19,19 +19,8 @@ def calculate(event: str, streak: int = 0) -> dict:
     """Calculate score with streak multiplier and variable bonus."""
     base = BASE_SCORES.get(event, 0)
 
-    # streak multiplier — 동일 로직을 streak.get_streak_multiplier()와 공유
-    if streak >= 30:
-        multiplier = 5.0
-    elif streak >= 21:
-        multiplier = 4.0
-    elif streak >= 14:
-        multiplier = 3.0
-    elif streak >= 7:
-        multiplier = 2.0
-    elif streak >= 3:
-        multiplier = 1.5
-    else:
-        multiplier = 1.0
+    # streak multiplier (max 5x)
+    multiplier = min(1 + streak * 0.05, 5.0)
     points = round(base * multiplier)
 
     # 15% variable bonus (Skinner)

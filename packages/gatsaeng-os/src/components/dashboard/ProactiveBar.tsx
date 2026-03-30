@@ -80,7 +80,7 @@ export function ProactiveBar() {
       {visible.map(alert => (
         <div
           key={alert.id}
-          className={`flex items-center gap-3 px-4 py-2 rounded-lg border text-sm ${colorMap[alert.type]}`}
+          className={`flex items-center gap-3 px-4 py-2 rounded-sm border text-sm ${colorMap[alert.type]}`}
         >
           {iconMap[alert.type]}
           <span className="font-medium">{alert.title}</span>

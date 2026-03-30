@@ -5,13 +5,13 @@ const SECRET = new TextEncoder().encode(
 )
 
 export const COOKIE_NAME = 'gs_auth'
-export const COOKIE_MAX_AGE = 7 * 24 * 60 * 60 // 7 days
+export const COOKIE_MAX_AGE = 30 * 24 * 60 * 60 // 30 days
 
 export async function signToken(payload: { username: string }) {
   return new SignJWT(payload)
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
-    .setExpirationTime('7d')
+    .setExpirationTime('30d')
     .sign(SECRET)
 }
 
