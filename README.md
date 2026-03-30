@@ -11,8 +11,10 @@ npx create-arete-workspace
 ## What's Included
 
 - **Eve**: AI Chief of Staff (Telegram integration)
+- **사주 기반 코칭**: 온보딩에서 생년월일시 입력 → 명리 공명 프레임워크로 맞춤 운영 매뉴얼 자동 생성
 - **Memory Bridge**: Auto-integrate knowledge across agents
-- **FORGE Workflow**: Coding agent + Impact Map
+- **FORGE Workflow**: Coding agent + 3-Mode (Full Build / Upgrade / QA)
+- **Compound Knowledge**: 코딩 경험 자동 축적 (confidence decay + cross-project)
 - **Verify Loop**: Automatic implementation verification
 - **Tracer Agent**: Evidence-based bug causal tracking
 
