@@ -1,0 +1,232 @@
+#!/usr/bin/env python3
+"""
+build_schedule_signals.py — Calendar → Schedule Signals Writer
+Pulls today's (and optionally tomorrow's) events from an available calendar
+source and writes them to schedule-signals/YYYY-MM-DD.md.
+
+Supported calendar backends (detected in order):
+  1. JSON file export  — SCHEDULE_JSON_PATH env var pointing to a file
+  2. Apple Calendar     — macOS only, via `icalbuddy` CLI (optional)
+  3. No source          — graceful skip, exit 0
+
+If no calendar source is configured the script exits cleanly with a notice.
+No crash, no noise.
+
+Config (env vars):
+  WORKSPACE_PATH        — root of workspace (default: {{WORKSPACE_PATH}})
+  SCHEDULE_JSON_PATH    — path to a JSON/JSONL file of events (optional)
+  USE_ICALBUDDY         — "1" to attempt Apple Calendar via icalbuddy (macOS)
+  LOOKAHEAD_DAYS        — how many future days to include (default: 1)
+  TIMEZONE              — timezone label for display (default: UTC)
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+import os
+import shutil
+import subprocess
+import sys
+from datetime import date, datetime, timedelta
+from pathlib import Path
+from typing import Dict, List, Optional
+
+# ── Config ────────────────────────────────────────────────────────────────────
+WORKSPACE_PATH = Path(os.environ.get("WORKSPACE_PATH", "{{WORKSPACE_PATH}}"))
+SCHEDULE_JSON_PATH: Optional[str] = os.environ.get("SCHEDULE_JSON_PATH")
+USE_ICALBUDDY: bool = os.environ.get("USE_ICALBUDDY", "0") == "1"
+LOOKAHEAD_DAYS: int = int(os.environ.get("LOOKAHEAD_DAYS", "1"))
+TIMEZONE: str = os.environ.get("TIMEZONE", "UTC")
+
+OUTPUT_DIR = WORKSPACE_PATH / "schedule-signals"
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [build_schedule_signals] %(levelname)s %(message)s",
+    datefmt="%H:%M:%S",
+)
+log = logging.getLogger(__name__)
+
+# ── Data model ────────────────────────────────────────────────────────────────
+
+def make_event(title: str, start: str, end: str,
+               location: str = "", attendees: Optional[List[str]] = None,
+               notes: str = "") -> Dict[str, object]:
+    return {
+        "title": title,
+        "start": start,
+        "end": end,
+        "location": location,
+        "attendees": attendees or [],
+        "notes": notes,
+    }
+
+# ── Backends ──────────────────────────────────────────────────────────────────
+
+def load_from_json(path: str, target_date: date) -> List[Dict[str, object]]:
+    """Load events from a JSON or JSONL file, filtered to target_date."""
+    fpath = Path(path)
+    if not fpath.exists():
+        log.warning("SCHEDULE_JSON_PATH set but file not found: %s", path)
+        return []
+    try:
+        text = fpath.read_text(encoding="utf-8")
+    except OSError as exc:
+        log.warning("Cannot read %s: %s", path, exc)
+        return []
+
+    raw: List[dict] = []
+    if fpath.suffix.lower() == ".jsonl":
+        for line in text.splitlines():
+            line = line.strip()
+            if line:
+                try:
+                    raw.append(json.loads(line))
+                except json.JSONDecodeError:
+                    pass
+    else:
+        try:
+            obj = json.loads(text)
+            raw = obj if isinstance(obj, list) else [obj]
+        except json.JSONDecodeError as exc:
+            log.warning("JSON parse error in %s: %s", path, exc)
+            return []
+
+    tag = target_date.isoformat()
+    events = []
+    for item in raw:
+        start = str(item.get("start", item.get("date", "")))
+        if tag in start:
+            events.append(make_event(
+                title=item.get("title", item.get("summary", "Untitled")),
+                start=start,
+                end=str(item.get("end", "")),
+                location=str(item.get("location", "")),
+                attendees=item.get("attendees", []),
+                notes=str(item.get("notes", item.get("description", ""))),
+            ))
+    return events
+
+
+def load_from_icalbuddy(target_date: date) -> List[Dict[str, object]]:
+    """Pull events via icalbuddy (macOS). Returns [] if unavailable."""
+    if shutil.which("icalbuddy") is None:
+        log.info("icalbuddy not found — skipping Apple Calendar source.")
+        return []
+    date_str = target_date.strftime("%m/%d/%Y")
+    try:
+        result = subprocess.run(
+            ["icalbuddy", "-f", "-nc", "-iep", "title,datetime,location,attendees",
+             "eventsFrom:" + date_str + " to:" + date_str],
+            capture_output=True, text=True, timeout=15,
+        )
+    except subprocess.TimeoutExpired:
+        log.warning("icalbuddy timed out.")
+        return []
+    except OSError as exc:
+        log.warning("icalbuddy error: %s", exc)
+        return []
+
+    if result.returncode != 0:
+        log.debug("icalbuddy exit %d: %s", result.returncode, result.stderr.strip())
+
+    events = []
+    for line in result.stdout.splitlines():
+        line = line.strip()
+        if not line or line.startswith("No events"):
+            continue
+        # icalbuddy output is free-form; capture as-is in title
+        events.append(make_event(title=line, start=target_date.isoformat(), end=""))
+    return events
+
+# ── Renderer ──────────────────────────────────────────────────────────────────
+
+def render_markdown(events: List[Dict[str, object]], target_date: date) -> str:
+    lines = [
+        f"# Schedule Signals — {target_date.isoformat()} ({TIMEZONE})",
+        "",
+        f"_Generated: {datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')}_",
+        "",
+    ]
+    if not events:
+        lines += [
+            "## No events found",
+            "",
+            "> Calendar source returned no events for this date.",
+            "> If this is unexpected, check SCHEDULE_JSON_PATH or icalbuddy setup.",
+        ]
+        return "\n".join(lines)
+
+    lines.append(f"## Events ({len(events)})")
+    lines.append("")
+    for ev in events:
+        lines.append(f"### {ev['title']}")
+        if ev['start']:
+            time_str = f"{ev['start']}"
+            if ev['end']:
+                time_str += f" → {ev['end']}"
+            lines.append(f"- **Time**: {time_str}")
+        if ev['location']:
+            lines.append(f"- **Location**: {ev['location']}")
+        attendees = ev.get('attendees', [])
+        if attendees:
+            lines.append(f"- **Attendees**: {', '.join(str(a) for a in attendees)}")
+        if ev['notes']:
+            lines.append(f"- **Notes**: {ev['notes']}")
+        lines.append("")
+    return "\n".join(lines)
+
+# ── Main ──────────────────────────────────────────────────────────────────────
+
+def process_date(target_date: date) -> bool:
+    """Write schedule-signals for target_date. Returns True if events found."""
+    events: List[Dict[str, object]] = []
+
+    # Backend 1: JSON file
+    if SCHEDULE_JSON_PATH:
+        events = load_from_json(SCHEDULE_JSON_PATH, target_date)
+        if events:
+            log.info("Loaded %d events from JSON file for %s", len(events), target_date)
+
+    # Backend 2: icalbuddy (macOS)
+    if not events and USE_ICALBUDDY:
+        events = load_from_icalbuddy(target_date)
+        if events:
+            log.info("Loaded %d events via icalbuddy for %s", len(events), target_date)
+
+    # Always write output (even empty — so downstream pipeline knows it ran)
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    out_path = OUTPUT_DIR / f"{target_date.isoformat()}.md"
+    out_path.write_text(render_markdown(events, target_date), encoding="utf-8")
+    log.info("%s schedule-signals written → %s (%d events)",
+             target_date, out_path, len(events))
+    return bool(events)
+
+
+def main() -> int:
+    no_source = not SCHEDULE_JSON_PATH and not USE_ICALBUDDY
+    if no_source:
+        log.info(
+            "No calendar source configured. "
+            "Set SCHEDULE_JSON_PATH or USE_ICALBUDDY=1 to enable schedule signals. "
+            "Skipping gracefully."
+        )
+        return 0
+
+    today = date.today()
+    dates = [today + timedelta(days=i) for i in range(LOOKAHEAD_DAYS + 1)]
+
+    any_found = False
+    for d in dates:
+        found = process_date(d)
+        any_found = any_found or found
+
+    if not any_found:
+        log.info("No events found across %d day(s). Pipeline continues.", len(dates))
+
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

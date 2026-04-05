@@ -1,0 +1,228 @@
+#!/usr/bin/env python3
+"""
+build_normalized.py — PersonalKB Normalization Engine
+Merges chat-signals, meeting-signals, schedule-signals, voice-inbox, and
+daily memory logs into a single JSONL file per day.
+
+Config via environment variables (or edit CONSTANTS below):
+  WORKSPACE_PATH   — root of workspace (default: {{WORKSPACE_PATH}})
+  LOOKBACK_DAYS    — how many days to include (default: 7)
+  INCLUDE_ALL      — set to "1" to include all historical days
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+import os
+import re
+import sys
+from datetime import date, datetime, timedelta
+from pathlib import Path
+from typing import Dict, List, Optional
+
+# ── Config ────────────────────────────────────────────────────────────────────
+WORKSPACE_PATH = Path(os.environ.get("WORKSPACE_PATH", "{{WORKSPACE_PATH}}"))
+LOOKBACK_DAYS: int = int(os.environ.get("LOOKBACK_DAYS", "7"))
+INCLUDE_ALL: bool = os.environ.get("INCLUDE_ALL", "0") == "1"
+
+OUTPUT_DIR = WORKSPACE_PATH / "data" / "normalized"
+
+# Source directories — all are optional; missing sources are silently skipped.
+SOURCES: Dict[str, Path] = {
+    "chat":     WORKSPACE_PATH / "chat-signals",
+    "meeting":  WORKSPACE_PATH / "meeting-signals",
+    "schedule": WORKSPACE_PATH / "schedule-signals",
+    "voice":    WORKSPACE_PATH / "voice-inbox",
+    "memory":   WORKSPACE_PATH / "memory",
+}
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [build_normalized] %(levelname)s %(message)s",
+    datefmt="%H:%M:%S",
+)
+log = logging.getLogger(__name__)
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
+
+
+def date_range() -> List[date]:
+    """Return list of dates to process."""
+    if INCLUDE_ALL:
+        return []  # handled separately
+    today = date.today()
+    return [today - timedelta(days=i) for i in range(LOOKBACK_DAYS)]
+
+
+def iter_files_for_date(source_dir: Path, target_date: date) -> List[Path]:
+    """Return files in source_dir whose name contains target_date (YYYY-MM-DD)."""
+    if not source_dir.exists():
+        return []
+    tag = target_date.isoformat()
+    return [f for f in source_dir.iterdir() if tag in f.name and f.is_file()]
+
+
+def parse_markdown_entry(path: Path, source_type: str, target_date: date) -> List[dict]:
+    """
+    Parse a markdown file into a list of normalized records.
+    Each H2/H3 section becomes one record. Falls back to whole-file if no headers.
+    """
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        log.warning("Cannot read %s: %s", path, exc)
+        return []
+
+    records = []
+    # Split on H2 or H3 headers
+    sections = re.split(r"(?m)^#{2,3} ", text)
+    for section in sections:
+        section = section.strip()
+        if not section:
+            continue
+        lines = section.splitlines()
+        title = lines[0].strip() if lines else ""
+        body = "\n".join(lines[1:]).strip() if len(lines) > 1 else ""
+        if not title and not body:
+            continue
+        records.append({
+            "date": target_date.isoformat(),
+            "source": source_type,
+            "file": path.name,
+            "title": title,
+            "body": body,
+            "ingested_at": datetime.utcnow().isoformat() + "Z",
+        })
+
+    if not records and text.strip():
+        # No headers — treat whole file as one record
+        records.append({
+            "date": target_date.isoformat(),
+            "source": source_type,
+            "file": path.name,
+            "title": path.stem,
+            "body": text.strip(),
+            "ingested_at": datetime.utcnow().isoformat() + "Z",
+        })
+
+    return records
+
+
+def parse_jsonl_entry(path: Path, source_type: str, target_date: date) -> List[dict]:
+    """Parse a .jsonl file; each line becomes one record with source/date injected."""
+    records = []
+    try:
+        with path.open(encoding="utf-8") as fh:
+            for lineno, line in enumerate(fh, 1):
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    obj = json.loads(line)
+                except json.JSONDecodeError as exc:
+                    log.warning("%s line %d: invalid JSON — %s", path.name, lineno, exc)
+                    continue
+                obj.setdefault("date", target_date.isoformat())
+                obj.setdefault("source", source_type)
+                obj.setdefault("file", path.name)
+                obj.setdefault("ingested_at", datetime.utcnow().isoformat() + "Z")
+                records.append(obj)
+    except OSError as exc:
+        log.warning("Cannot read %s: %s", path, exc)
+    return records
+
+
+def process_file(path: Path, source_type: str, target_date: date) -> List[dict]:
+    suffix = path.suffix.lower()
+    if suffix in (".md", ".txt"):
+        return parse_markdown_entry(path, source_type, target_date)
+    elif suffix == ".jsonl":
+        return parse_jsonl_entry(path, source_type, target_date)
+    elif suffix == ".json":
+        try:
+            obj = json.loads(path.read_text(encoding="utf-8"))
+            records = obj if isinstance(obj, list) else [obj]
+            for r in records:
+                r.setdefault("date", target_date.isoformat())
+                r.setdefault("source", source_type)
+                r.setdefault("file", path.name)
+                r.setdefault("ingested_at", datetime.utcnow().isoformat() + "Z")
+            return records
+        except (OSError, json.JSONDecodeError) as exc:
+            log.warning("Cannot parse %s: %s", path, exc)
+            return []
+    else:
+        log.debug("Skipping unsupported file type: %s", path)
+        return []
+
+
+def write_output(records: List[dict], target_date: date) -> Path:
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    out_path = OUTPUT_DIR / f"{target_date.isoformat()}.jsonl"
+    with out_path.open("w", encoding="utf-8") as fh:
+        for record in records:
+            fh.write(json.dumps(record, ensure_ascii=False) + "\n")
+    return out_path
+
+
+def process_date(target_date: date) -> int:
+    """Process all sources for a single date. Returns number of records written."""
+    all_records: List[dict] = []
+
+    for source_type, source_dir in SOURCES.items():
+        if not source_dir.exists():
+            log.debug("Source '%s' not found — skipping (%s)", source_type, source_dir)
+            continue
+        files = iter_files_for_date(source_dir, target_date)
+        for fpath in files:
+            records = process_file(fpath, source_type, target_date)
+            all_records.extend(records)
+            log.debug("  %s → %d records", fpath.name, len(records))
+
+    if all_records:
+        out = write_output(all_records, target_date)
+        log.info("✓ %s — %d records → %s", target_date, len(all_records), out)
+    else:
+        log.info("○ %s — no data found (sources checked: %s)",
+                 target_date, ", ".join(SOURCES.keys()))
+
+    return len(all_records)
+
+
+# ── Main ──────────────────────────────────────────────────────────────────────
+
+def main() -> int:
+    log.info("build_normalized starting | workspace=%s lookback=%s days",
+             WORKSPACE_PATH, "ALL" if INCLUDE_ALL else LOOKBACK_DAYS)
+
+    if INCLUDE_ALL:
+        # Walk all source dirs for any dated files
+        all_dates = set()
+        for source_dir in SOURCES.values():
+            if not source_dir.exists():
+                continue
+            for fpath in source_dir.iterdir():
+                m = DATE_RE.search(fpath.name)
+                if m:
+                    try:
+                        all_dates.add(date.fromisoformat(m.group()))
+                    except ValueError:
+                        pass
+        dates = sorted(all_dates)
+    else:
+        dates = date_range()
+
+    if not dates:
+        log.info("No dates to process.")
+        return 0
+
+    total = sum(process_date(d) for d in dates)
+    log.info("Done — %d total records across %d days.", total, len(dates))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

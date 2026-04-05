@@ -1,0 +1,229 @@
+#!/usr/bin/env python3
+"""
+query_filing.py — Query Result Filing Pipeline (P0 skeleton / P2 full loop)
+Saves useful Claude answers/analyses to data/query-results/candidates.jsonl.
+Supports 'candidate' and 'approved' states for nightly wiki promotion.
+
+Usage:
+  python query_filing.py add    --title "..." --body "..." [--tags tag1,tag2]
+  python query_filing.py list   [--status candidate|approved|all]
+  python query_filing.py approve <id>
+  python query_filing.py reject  <id>
+  python query_filing.py ingest  <markdown_file>   # batch from a daily log
+
+Trigger token: Append [SAVE:WIKI] anywhere in a message to auto-file.
+Nightly intel reads 'approved' entries → promotes to wiki insights.
+
+Config (env vars):
+  WORKSPACE_PATH — root of workspace (default: {{WORKSPACE_PATH}})
+"""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import logging
+import os
+import sys
+from datetime import datetime
+from pathlib import Path
+from typing import List, Optional
+
+# ── Config ────────────────────────────────────────────────────────────────────
+WORKSPACE_PATH = Path(os.environ.get("WORKSPACE_PATH", "{{WORKSPACE_PATH}}"))
+CANDIDATES_FILE = WORKSPACE_PATH / "data" / "query-results" / "candidates.jsonl"
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [query_filing] %(levelname)s %(message)s",
+    datefmt="%H:%M:%S",
+)
+log = logging.getLogger(__name__)
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+def make_id(title: str, body: str) -> str:
+    digest = hashlib.sha1((title + body).encode()).hexdigest()
+    return digest[:8]
+
+
+def now_iso() -> str:
+    return datetime.utcnow().isoformat() + "Z"
+
+
+def load_all() -> List[dict]:
+    if not CANDIDATES_FILE.exists():
+        return []
+    records = []
+    with CANDIDATES_FILE.open(encoding="utf-8") as fh:
+        for line in fh:
+            line = line.strip()
+            if line:
+                try:
+                    records.append(json.loads(line))
+                except json.JSONDecodeError as exc:
+                    log.warning("Skipping malformed line: %s", exc)
+    return records
+
+
+def save_all(records: List[dict]) -> None:
+    CANDIDATES_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with CANDIDATES_FILE.open("w", encoding="utf-8") as fh:
+        for r in records:
+            fh.write(json.dumps(r, ensure_ascii=False) + "\n")
+
+
+def find_by_id(records: List[dict], record_id: str) -> Optional[int]:
+    for i, r in enumerate(records):
+        if r.get("id", "").startswith(record_id):
+            return i
+    return None
+
+# ── Commands ──────────────────────────────────────────────────────────────────
+
+def cmd_add(title: str, body: str, tags: Optional[List[str]] = None,
+            source: str = "manual") -> None:
+    records = load_all()
+    record_id = make_id(title, body)
+    # Dedup
+    if any(r.get("id") == record_id for r in records):
+        log.info("Already filed (id=%s). Skipping.", record_id)
+        return
+    entry = {
+        "id": record_id,
+        "title": title,
+        "body": body,
+        "tags": tags or [],
+        "source": source,
+        "status": "candidate",
+        "filed_at": now_iso(),
+        "updated_at": now_iso(),
+    }
+    records.append(entry)
+    save_all(records)
+    log.info("Filed candidate id=%s: %s", record_id, title)
+
+
+def cmd_list(status: str = "all") -> None:
+    records = load_all()
+    if status != "all":
+        records = [r for r in records if r.get("status") == status]
+    if not records:
+        print(f"No records (status={status}).")
+        return
+    for r in records:
+        tags_str = ", ".join(r.get("tags", [])) or "—"
+        print(f"[{r.get('status','?'):9s}] {r.get('id','?')} | {r.get('filed_at','?')[:10]} | "
+              f"{r.get('title','?')[:60]} | tags: {tags_str}")
+
+
+def cmd_approve(record_id: str) -> None:
+    records = load_all()
+    idx = find_by_id(records, record_id)
+    if idx is None:
+        log.error("Record not found: %s", record_id)
+        sys.exit(1)
+    records[idx]["status"] = "approved"
+    records[idx]["updated_at"] = now_iso()
+    save_all(records)
+    log.info("Approved: %s — %s", records[idx]["id"], records[idx]["title"])
+
+
+def cmd_reject(record_id: str) -> None:
+    records = load_all()
+    idx = find_by_id(records, record_id)
+    if idx is None:
+        log.error("Record not found: %s", record_id)
+        sys.exit(1)
+    records[idx]["status"] = "rejected"
+    records[idx]["updated_at"] = now_iso()
+    save_all(records)
+    log.info("Rejected: %s", records[idx]["id"])
+
+
+def cmd_ingest(md_path: str) -> None:
+    """
+    Scan a markdown file for [SAVE:WIKI] tokens and auto-file the surrounding
+    paragraph or H2/H3 section as a candidate.
+    """
+    import re
+    fpath = Path(md_path)
+    if not fpath.exists():
+        log.error("File not found: %s", md_path)
+        sys.exit(1)
+    text = fpath.read_text(encoding="utf-8")
+    # Find [SAVE:WIKI] markers and capture the preceding block
+    pattern = re.compile(
+        r"(?:^#{1,3} (.+)\n([\s\S]*?))?(?:\n\n|\Z).*?\[SAVE:WIKI\]",
+        re.MULTILINE,
+    )
+    sections = re.split(r"(?m)^#{2,3} ", text)
+    filed = 0
+    for section in sections:
+        if "[SAVE:WIKI]" not in section:
+            continue
+        lines = section.strip().splitlines()
+        title = lines[0].strip() if lines else fpath.stem
+        body = "\n".join(lines[1:]).strip() if len(lines) > 1 else section.strip()
+        # Remove the trigger token from body
+        body = body.replace("[SAVE:WIKI]", "").strip()
+        cmd_add(title=title, body=body, source=fpath.name)
+        filed += 1
+
+    log.info("Ingest complete: %d item(s) filed from %s.", filed, fpath.name)
+
+# ── CLI ───────────────────────────────────────────────────────────────────────
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="query_filing",
+        description="File and manage query results for wiki promotion.",
+    )
+    sub = parser.add_subparsers(dest="command")
+
+    p_add = sub.add_parser("add", help="File a new candidate")
+    p_add.add_argument("--title", required=True)
+    p_add.add_argument("--body",  required=True)
+    p_add.add_argument("--tags",  default="")
+    p_add.add_argument("--source", default="manual")
+
+    p_list = sub.add_parser("list", help="List filed candidates")
+    p_list.add_argument("--status", default="all",
+                        choices=["all", "candidate", "approved", "rejected"])
+
+    p_approve = sub.add_parser("approve", help="Approve a candidate by ID prefix")
+    p_approve.add_argument("id")
+
+    p_reject = sub.add_parser("reject", help="Reject a candidate by ID prefix")
+    p_reject.add_argument("id")
+
+    p_ingest = sub.add_parser("ingest", help="Scan a markdown file for [SAVE:WIKI] tokens")
+    p_ingest.add_argument("file")
+
+    return parser
+
+
+def main() -> int:
+    parser = build_parser()
+    args = parser.parse_args()
+
+    if args.command == "add":
+        tags = [t.strip() for t in args.tags.split(",") if t.strip()] if args.tags else []
+        cmd_add(title=args.title, body=args.body, tags=tags, source=args.source)
+    elif args.command == "list":
+        cmd_list(status=args.status)
+    elif args.command == "approve":
+        cmd_approve(args.id)
+    elif args.command == "reject":
+        cmd_reject(args.id)
+    elif args.command == "ingest":
+        cmd_ingest(args.file)
+    else:
+        parser.print_help()
+
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

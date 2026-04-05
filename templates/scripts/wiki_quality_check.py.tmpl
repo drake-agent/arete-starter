@@ -1,0 +1,313 @@
+#!/usr/bin/env python3
+"""
+wiki_quality_check.py — Wiki Quality Gate
+Scans the wiki directory for common quality issues and reports them.
+
+Exit codes:
+  0 — clean (no issues)
+  1 — warnings (placeholder / thin articles — non-blocking)
+  2 — errors   (broken internal links — blocking)
+
+Checks performed:
+  - Placeholder articles (only contains template text / fewer than MIN_BODY_LINES lines)
+  - Thin articles (body length below THIN_THRESHOLD words)
+  - Broken internal links ([[WikiLink]] or [text](relative/path.md))
+  - Index files missing (wiki/_index.md, wiki/people/_index.md)
+
+Output: 4-block card summary
+  완료 | 진행 | 대기 | 다음
+
+Config (env vars):
+  WORKSPACE_PATH     — root of workspace (default: {{WORKSPACE_PATH}})
+  WIKI_DIR           — wiki directory (default: WORKSPACE_PATH/wiki)
+  MIN_BODY_LINES     — lines below which article is "placeholder" (default: 3)
+  THIN_THRESHOLD     — word count below which article is "thin" (default: 30)
+  REPORT_PATH        — write JSON report to this path (optional)
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+import os
+import re
+import sys
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
+
+# ── Config ────────────────────────────────────────────────────────────────────
+WORKSPACE_PATH = Path(os.environ.get("WORKSPACE_PATH", "{{WORKSPACE_PATH}}"))
+WIKI_DIR = Path(os.environ.get("WIKI_DIR", str(WORKSPACE_PATH / "wiki")))
+MIN_BODY_LINES: int = int(os.environ.get("MIN_BODY_LINES", "3"))
+THIN_THRESHOLD: int = int(os.environ.get("THIN_THRESHOLD", "30"))
+REPORT_PATH: Optional[str] = os.environ.get("REPORT_PATH")
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [wiki_quality_check] %(levelname)s %(message)s",
+    datefmt="%H:%M:%S",
+)
+log = logging.getLogger(__name__)
+
+# Placeholder signals — articles containing only these patterns are flagged
+PLACEHOLDER_PATTERNS = [
+    re.compile(r"^#+ .+\n*$", re.MULTILINE),   # header only
+    re.compile(r"\bTODO\b", re.IGNORECASE),
+    re.compile(r"\bplaceholder\b", re.IGNORECASE),
+    re.compile(r"\bWIP\b"),
+    re.compile(r"^\s*>\s*_?stub_?\s*$", re.MULTILINE),
+]
+
+# ── Checks ────────────────────────────────────────────────────────────────────
+
+Issue = Dict[str, str]  # {file, kind, detail}
+
+
+def collect_markdown_files() -> List[Path]:
+    if not WIKI_DIR.exists():
+        return []
+    return sorted(WIKI_DIR.rglob("*.md"))
+
+
+def check_placeholders(files: List[Path]) -> List[Issue]:
+    issues: List[Issue] = []
+    for fpath in files:
+        try:
+            text = fpath.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        lines = [l for l in text.splitlines() if l.strip()]
+        if len(lines) < MIN_BODY_LINES:
+            issues.append({
+                "file": str(fpath.relative_to(WIKI_DIR)),
+                "kind": "placeholder",
+                "detail": f"Only {len(lines)} non-empty line(s)",
+            })
+            continue
+        for pat in PLACEHOLDER_PATTERNS:
+            if pat.search(text):
+                issues.append({
+                    "file": str(fpath.relative_to(WIKI_DIR)),
+                    "kind": "placeholder",
+                    "detail": f"Contains placeholder pattern: {pat.pattern[:40]}",
+                })
+                break
+    return issues
+
+
+def check_thin(files: List[Path]) -> List[Issue]:
+    issues: List[Issue] = []
+    for fpath in files:
+        try:
+            text = fpath.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        # Strip frontmatter and headers for word count
+        body = re.sub(r"^---[\s\S]+?---\n", "", text)
+        body = re.sub(r"^#+.+$", "", body, flags=re.MULTILINE)
+        words = body.split()
+        if len(words) < THIN_THRESHOLD:
+            issues.append({
+                "file": str(fpath.relative_to(WIKI_DIR)),
+                "kind": "thin",
+                "detail": f"{len(words)} word(s) (threshold: {THIN_THRESHOLD})",
+            })
+    return issues
+
+
+def check_broken_links(files: List[Path]) -> List[Issue]:
+    """Check [[WikiLink]] and [text](relative.md) style links."""
+    all_stems = {f.stem.lower() for f in files}
+    all_rel = {str(f.relative_to(WIKI_DIR)).lower() for f in files}
+    issues: List[Issue] = []
+
+    wiki_link_re = re.compile(r"\[\[([^\]|]+)(?:\|[^\]]*)?\]\]")
+    md_link_re   = re.compile(r"\[(?:[^\]]*)\]\(([^)]+)\)")
+
+    for fpath in files:
+        try:
+            text = fpath.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        rel_file = str(fpath.relative_to(WIKI_DIR))
+
+        # [[WikiLink]]
+        for m in wiki_link_re.finditer(text):
+            target = m.group(1).strip()
+            if target.lower() not in all_stems:
+                issues.append({
+                    "file": rel_file,
+                    "kind": "broken_link",
+                    "detail": f"[[{target}]] not found in wiki",
+                })
+
+        # [text](relative.md)
+        for m in md_link_re.finditer(text):
+            href = m.group(1).strip()
+            # Skip absolute URLs and anchors
+            if href.startswith(("http://", "https://", "#", "mailto:")):
+                continue
+            # Resolve relative to file's directory
+            resolved = (fpath.parent / href).resolve()
+            try:
+                resolved_rel = str(resolved.relative_to(WIKI_DIR.resolve())).lower()
+            except ValueError:
+                resolved_rel = href.lower()
+            if resolved_rel not in all_rel and not resolved.exists():
+                issues.append({
+                    "file": rel_file,
+                    "kind": "broken_link",
+                    "detail": f"[...]({href}) target not found",
+                })
+
+    return issues
+
+
+def check_required_indexes() -> List[Issue]:
+    required = [
+        WIKI_DIR / "_index.md",
+        WIKI_DIR / "people" / "_index.md",
+    ]
+    issues: List[Issue] = []
+    for path in required:
+        if not path.exists():
+            issues.append({
+                "file": str(path.relative_to(WIKI_DIR)) if WIKI_DIR in path.parents or path.parent == WIKI_DIR else str(path),
+                "kind": "missing_index",
+                "detail": "Required index file not found",
+            })
+    return issues
+
+# ── Report ────────────────────────────────────────────────────────────────────
+
+def render_card_report(
+    placeholder_issues: List[Issue],
+    thin_issues: List[Issue],
+    broken_issues: List[Issue],
+    index_issues: List[Issue],
+    total_files: int,
+) -> Tuple[str, int]:
+    """
+    Render the 4-block card summary and return (report_text, exit_code).
+    Exit codes: 0=clean, 1=warnings, 2=broken.
+    """
+    warnings = placeholder_issues + thin_issues + index_issues
+    errors   = broken_issues
+
+    exit_code = 0
+    if warnings:
+        exit_code = 1
+    if errors:
+        exit_code = 2
+
+    # ── 완료 block
+    # Only count files that were actually scanned (exclude missing-index virtual entries)
+    scanned_affected = set(i["file"] for i in placeholder_issues + thin_issues + broken_issues)
+    clean_count = max(0, total_files - len(scanned_affected))
+    completed_lines = [f"  • {total_files} file(s) scanned, {clean_count} clean"]
+
+    # ── 진행 block
+    in_progress_lines = []
+    if placeholder_issues:
+        in_progress_lines.append(f"  • {len(placeholder_issues)} placeholder article(s)")
+        for i in placeholder_issues[:3]:
+            in_progress_lines.append(f"    - {i['file']}: {i['detail']}")
+        if len(placeholder_issues) > 3:
+            in_progress_lines.append(f"    … and {len(placeholder_issues)-3} more")
+    if thin_issues:
+        in_progress_lines.append(f"  • {len(thin_issues)} thin article(s)")
+        for i in thin_issues[:3]:
+            in_progress_lines.append(f"    - {i['file']}: {i['detail']}")
+        if len(thin_issues) > 3:
+            in_progress_lines.append(f"    … and {len(thin_issues)-3} more")
+    if not in_progress_lines:
+        in_progress_lines.append("  • No warnings")
+
+    # ── 대기 block (blocking issues)
+    pending_lines = []
+    if errors:
+        pending_lines.append(f"  • {len(errors)} broken link(s) — must fix before ship")
+        for i in errors[:5]:
+            pending_lines.append(f"    - {i['file']}: {i['detail']}")
+        if len(errors) > 5:
+            pending_lines.append(f"    … and {len(errors)-5} more")
+    if index_issues:
+        for i in index_issues:
+            pending_lines.append(f"  • MISSING INDEX: {i['file']}")
+    if not pending_lines:
+        pending_lines.append("  • Nothing blocking")
+
+    # ── 다음 block
+    next_lines = []
+    if errors:
+        next_lines.append("  • Fix broken links → rerun wiki_quality_check.py")
+    if placeholder_issues:
+        next_lines.append("  • Expand placeholder articles (add at least 3 content lines)")
+    if thin_issues:
+        next_lines.append(f"  • Enrich thin articles (target: >{THIN_THRESHOLD} words each)")
+    if not next_lines:
+        next_lines.append("  • Wiki looks healthy. Keep writing.")
+
+    status_emoji = {0: "✅ CLEAN", 1: "⚠️  WARNING", 2: "🚨 BROKEN"}[exit_code]
+    lines = [
+        f"# Wiki Quality Gate — {status_emoji}",
+        "",
+        "## 완료",
+        *completed_lines,
+        "",
+        "## 진행",
+        *in_progress_lines,
+        "",
+        "## 대기",
+        *pending_lines,
+        "",
+        "## 다음",
+        *next_lines,
+        "",
+        f"_Exit code: {exit_code}_",
+    ]
+    return "\n".join(lines), exit_code
+
+
+# ── Main ──────────────────────────────────────────────────────────────────────
+
+def main() -> int:
+    if not WIKI_DIR.exists():
+        log.info("Wiki directory not found: %s — nothing to check.", WIKI_DIR)
+        print("Wiki directory not found. Skipping quality check.")
+        return 0
+
+    files = collect_markdown_files()
+    log.info("Scanning %d markdown file(s) in %s", len(files), WIKI_DIR)
+
+    placeholder_issues = check_placeholders(files)
+    thin_issues        = check_thin(files)
+    broken_issues      = check_broken_links(files)
+    index_issues       = check_required_indexes()
+
+    report, exit_code = render_card_report(
+        placeholder_issues, thin_issues, broken_issues, index_issues, len(files)
+    )
+
+    print(report)
+
+    if REPORT_PATH:
+        report_data = {
+            "exit_code": exit_code,
+            "total_files": len(files),
+            "placeholder": placeholder_issues,
+            "thin": thin_issues,
+            "broken_links": broken_issues,
+            "missing_index": index_issues,
+        }
+        rpath = Path(REPORT_PATH)
+        rpath.parent.mkdir(parents=True, exist_ok=True)
+        rpath.write_text(json.dumps(report_data, indent=2, ensure_ascii=False),
+                         encoding="utf-8")
+        log.info("Report written → %s", REPORT_PATH)
+
+    return exit_code
+
+
+if __name__ == "__main__":
+    sys.exit(main())
