@@ -22,11 +22,11 @@ OPENCLAW=/path/to/.openclaw
 | Time (local) | Job | Script / Command | Notes |
 |---|---|---|---|
 | Every 2h | Session Auto-Indexer | `python $WORKSPACE/scripts/session_indexer.py` | Indexes agent sessions into daily memory |
-| 01:00 | PersonalKB Intel | `openclaw run intel` | Reads normalized signals → extracts themes, decisions, open loops |
-| 01:30 | Wiki Compiler | `openclaw run wiki` | Applies intel WIKI_INSTRUCTIONs → updates wiki files |
+| 01:00 | PersonalKB Intel | `cd $WORKSPACE && claude --print "$(cat prompts/intel.md)"` | Reads normalized signals → extracts themes, decisions, open loops |
+| 01:30 | Wiki Compiler | `cd $WORKSPACE && claude --print "$(cat prompts/wiki.md)"` | Applies intel WIKI_INSTRUCTIONs → updates wiki files |
 | 01:40 | Wiki Quality Gate | `python $WORKSPACE/scripts/wiki_quality_check.py` | Checks broken links, placeholders; exit 2 = broken |
-| 08:00 | PersonalKB Pre-brief | `openclaw run prebrief-review` | Generates meeting pre-briefs from schedule signals |
-| 08:30 | Morning Direction | `openclaw run morning-direction-v2` | Synthesizes pipeline output → actionable morning brief |
+| 08:00 | PersonalKB Pre-brief | `cd $WORKSPACE && claude --print "$(cat prompts/prebrief-review.md)"` | Generates meeting pre-briefs from schedule signals |
+| 08:30 | Morning Direction | `cd $WORKSPACE && claude --print "$(cat prompts/morning-direction-v2.md)"` | Synthesizes pipeline output → actionable morning brief |
 
 ---
 
@@ -44,7 +44,7 @@ OPENCLAW=/path/to/.openclaw
 
 ### PersonalKB Intel (01:00)
 ```cron
-0 1 * * * openclaw run intel >> $WORKSPACE/logs/intel.log 2>&1
+0 1 * * * cd $WORKSPACE && claude --print "$(cat prompts/intel.md)" >> $WORKSPACE/logs/intel.log 2>&1
 ```
 - Reads `data/normalized/*.jsonl` from last 7 days
 - Extracts themes, decisions, open loops, people updates
@@ -55,14 +55,14 @@ OPENCLAW=/path/to/.openclaw
 To run normalization inline:
 ```cron
 50 0 * * * cd $WORKSPACE && WORKSPACE_PATH=$WORKSPACE python scripts/build_normalized.py >> logs/normalized.log 2>&1
-0  1 * * * openclaw run intel >> $WORKSPACE/logs/intel.log 2>&1
+0  1 * * * cd $WORKSPACE && claude --print "$(cat prompts/intel.md)" >> $WORKSPACE/logs/intel.log 2>&1
 ```
 
 ---
 
 ### Wiki Compiler (01:30)
 ```cron
-30 1 * * * openclaw run wiki >> $WORKSPACE/logs/wiki.log 2>&1
+30 1 * * * cd $WORKSPACE && claude --print "$(cat prompts/wiki.md)" >> $WORKSPACE/logs/wiki.log 2>&1
 ```
 - Reads Intel output from today's daily log
 - Creates/upserts wiki files per `WIKI_INSTRUCTION` entries
@@ -90,7 +90,7 @@ To capture the quality report:
 
 ### PersonalKB Pre-brief (08:00)
 ```cron
-0 8 * * * openclaw run prebrief-review >> $WORKSPACE/logs/prebrief.log 2>&1
+0 8 * * * cd $WORKSPACE && claude --print "$(cat prompts/prebrief-review.md)" >> $WORKSPACE/logs/prebrief.log 2>&1
 ```
 - Reads `schedule-signals/YYYY-MM-DD.md` for today's meetings
 - Pulls attendee wiki profiles and relevant decisions
@@ -101,14 +101,14 @@ To capture the quality report:
 To run schedule signals before pre-brief:
 ```cron
 45 7 * * * cd $WORKSPACE && WORKSPACE_PATH=$WORKSPACE python scripts/build_schedule_signals.py >> logs/schedule.log 2>&1
-0  8 * * * openclaw run prebrief-review >> $WORKSPACE/logs/prebrief.log 2>&1
+0  8 * * * cd $WORKSPACE && claude --print "$(cat prompts/prebrief-review.md)" >> $WORKSPACE/logs/prebrief.log 2>&1
 ```
 
 ---
 
 ### Morning Direction (08:30)
 ```cron
-30 8 * * * openclaw run morning-direction-v2 >> $WORKSPACE/logs/morning.log 2>&1
+30 8 * * * cd $WORKSPACE && claude --print "$(cat prompts/morning-direction-v2.md)" >> $WORKSPACE/logs/morning.log 2>&1
 ```
 - Synthesizes: intel + wiki state + schedule + pending items → morning brief
 - Output: 4-block card (완료 / 진행 / 대기 / 다음)
