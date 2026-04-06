@@ -18,7 +18,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Server misconfigured' }, { status: 500 })
   }
 
-  const ip = req.headers.get('x-forwarded-for') ?? req.headers.get('x-real-ip') ?? 'unknown'
+  // NOTE: x-forwarded-for is spoofable. In production, configure your reverse proxy
+  // (nginx, Cloudflare, etc.) to set a trusted header, or use req.ip with a trusted proxy.
+  const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+    ?? req.headers.get('x-real-ip')
+    ?? 'unknown'
   const limit = getRateLimit(ip)
 
   if (limit.count >= 10) {
@@ -29,7 +33,14 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  const { username, password } = await req.json()
+  let username: string, password: string
+  try {
+    const body = await req.json()
+    username = body.username
+    password = body.password
+  } catch {
+    return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
+  }
 
   if (!checkCredentials(username, password)) {
     attempts.set(ip, { count: limit.count + 1, resetAt: limit.resetAt })

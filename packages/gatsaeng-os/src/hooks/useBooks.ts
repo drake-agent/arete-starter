@@ -12,10 +12,11 @@ export function useBook(id: string) {
   })
 }
 
-export function useBooks() {
+export function useBooks(enabled = true) {
   return useQuery({
     queryKey: ['books'],
     queryFn: () => apiFetch<Book[]>('/api/books'),
+    enabled,
   })
 }
 

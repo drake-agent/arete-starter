@@ -10,7 +10,7 @@ export function useNote(id: string) {
   })
 }
 
-export function useNotes(type?: NoteType, areaId?: string) {
+export function useNotes(type?: NoteType, areaId?: string, enabled = true) {
   return useQuery({
     queryKey: ['notes', type, areaId],
     queryFn: () => {
@@ -19,6 +19,7 @@ export function useNotes(type?: NoteType, areaId?: string) {
       if (areaId) params.set('area_id', areaId)
       return apiFetch<(Note & { _content?: string })[]>(`/api/notes?${params}`)
     },
+    enabled,
   })
 }
 

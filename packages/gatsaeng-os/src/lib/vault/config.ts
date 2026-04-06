@@ -1,6 +1,9 @@
 import path from 'path'
 
-export const VAULT_PATH = process.env.VAULT_PATH || '/Users/drake/.openclaw/EVE-obsidian/EVE/GatsaengOS'
+if (!process.env.VAULT_PATH) {
+  throw new Error('VAULT_PATH environment variable is required. Set it in .env')
+}
+export const VAULT_PATH = process.env.VAULT_PATH
 
 export const FOLDERS = {
   areas: path.join(VAULT_PATH, 'areas'),

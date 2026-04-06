@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import fs from 'fs'
 import path from 'path'
 
-const OPENCLAW_WORKSPACE = process.env.OPENCLAW_WORKSPACE || '/Users/drake/.openclaw/workspace'
+const OPENCLAW_WORKSPACE = process.env.OPENCLAW_WORKSPACE || path.join(process.env.HOME || '', '.openclaw/workspace')
 const CANDIDATES_PATH = path.join(OPENCLAW_WORKSPACE, 'playbooks/candidates.jsonl')
 
 export async function GET() {

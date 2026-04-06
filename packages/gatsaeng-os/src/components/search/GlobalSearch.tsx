@@ -59,12 +59,15 @@ export function GlobalSearch() {
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [])
 
-  // Data queries - only fetch when dialog is open
-  const { data: notes = [] } = useNotes()
-  const { data: tasks = [] } = useTasks()
-  const { data: goals = [] } = useGoals()
-  const { data: projects = [] } = useProjects()
-  const { data: books = [] } = useBooks()
+  // Data queries - only fetch when dialog has been opened at least once
+  const [hasOpened, setHasOpened] = useState(false)
+  useEffect(() => { if (open) setHasOpened(true) }, [open])
+
+  const { data: notes = [] } = useNotes(undefined, undefined, hasOpened)
+  const { data: tasks = [] } = useTasks(undefined, hasOpened)
+  const { data: goals = [] } = useGoals(hasOpened)
+  const { data: projects = [] } = useProjects(hasOpened)
+  const { data: books = [] } = useBooks(hasOpened)
 
   const handleSelect = (href: string) => {
     setOpen(false)

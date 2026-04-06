@@ -3,8 +3,7 @@ import fs from 'fs'
 import path from 'path'
 
 const REPORTS_DIR = path.join(
-  process.env.HOME || '/Users/drake',
-  'Documents/EVE-obsidian/EVE/Daily Reports'
+  process.env.REPORTS_DIR || path.join(process.env.HOME || '', 'Documents/EVE-obsidian/EVE/Daily Reports')
 )
 
 export type ReportCategory = 'invest' | 'beauty' | 'saju' | 'general'

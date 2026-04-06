@@ -4,10 +4,11 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '@/lib/apiFetch'
 import type { Goal } from '@/types'
 
-export function useGoals() {
+export function useGoals(enabled = true) {
   return useQuery({
     queryKey: ['goals'],
     queryFn: () => apiFetch<Goal[]>('/api/goals'),
+    enabled,
   })
 }
 

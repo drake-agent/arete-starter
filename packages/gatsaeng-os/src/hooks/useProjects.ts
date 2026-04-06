@@ -4,10 +4,11 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '@/lib/apiFetch'
 import type { Project, Task } from '@/types'
 
-export function useProjects() {
+export function useProjects(enabled = true) {
   return useQuery({
     queryKey: ['projects'],
     queryFn: () => apiFetch<Project[]>('/api/projects'),
+    enabled,
   })
 }
 
@@ -19,13 +20,14 @@ export function useTask(id: string) {
   })
 }
 
-export function useTasks(projectId?: string) {
+export function useTasks(projectId?: string, enabled = true) {
   return useQuery({
     queryKey: ['tasks', projectId],
     queryFn: () => {
       const url = projectId ? `/api/tasks?project_id=${projectId}` : '/api/tasks'
       return apiFetch<Task[]>(url)
     },
+    enabled,
   })
 }
 

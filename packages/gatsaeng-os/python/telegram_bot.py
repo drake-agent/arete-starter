@@ -24,9 +24,10 @@ logger = logging.getLogger(__name__)
 
 
 def is_authorized(update: Update) -> bool:
-    """Only allow Drake (chat_id from config)."""
+    """Only allow configured chat_id. Fail-closed when TELEGRAM_CHAT_ID is not set."""
     if not TELEGRAM_CHAT_ID:
-        return True
+        logger.warning('TELEGRAM_CHAT_ID not set — rejecting all messages for safety')
+        return False
     return str(update.effective_chat.id) == TELEGRAM_CHAT_ID.replace('tg:', '')
 
 

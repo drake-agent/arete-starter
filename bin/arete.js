@@ -52,8 +52,8 @@ function cmdStatus() {
   const agentsDir = resolve(homedir(), '.openclaw', 'agents');
   if (existsSync(agentsDir)) {
     try {
-      const agents = readdirSync(agentsDir).filter((f) =>
-        statSync(join(agentsDir, f)).isDirectory()
+      const agents = readdirSync(agentsDir, { withFileTypes: true }).filter((f) =>
+        f.isDirectory()
       );
       console.log(`  Agents: ${chalk.bold(agents.length)}`);
     } catch {
@@ -120,8 +120,11 @@ function cmdStart() {
 
   try {
     execSync('npm run dev', { cwd: gatsaengDir, stdio: 'inherit' });
-  } catch {
-    // User ctrl-c — normal exit
+  } catch (e) {
+    if (e.signal !== 'SIGINT' && e.status !== null) {
+      console.error(chalk.red(`Dev server exited with code ${e.status}`));
+      process.exit(e.status || 1);
+    }
   }
 }
 

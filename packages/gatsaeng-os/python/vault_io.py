@@ -1,5 +1,6 @@
 """Obsidian Vault I/O — Python mirror of Node.js vault/index.ts"""
 
+import re
 import frontmatter
 from pathlib import Path
 from datetime import date, datetime, timedelta
@@ -8,6 +9,21 @@ import yaml
 import uuid
 
 from config import FOLDERS, PROFILE_PATH, VAULT_PATH
+
+_SAFE_ID_RE = re.compile(r'^[a-zA-Z0-9_-]+$')
+_SAFE_DATE_RE = re.compile(r'^\d{4}-\d{2}-\d{2}$')
+
+
+def _validate_id(entity_id: str) -> str:
+    if not _SAFE_ID_RE.match(entity_id):
+        raise ValueError(f'Invalid entity id: {entity_id}')
+    return entity_id
+
+
+def _validate_date(date_str: str) -> str:
+    if not _SAFE_DATE_RE.match(date_str):
+        raise ValueError(f'Invalid date format: {date_str}')
+    return date_str
 
 
 def _ensure_dir(folder: str) -> Path:
@@ -37,12 +53,13 @@ def list_entities(folder: str) -> list[dict[str, Any]]:
 
 
 def get_entity(folder: str, entity_id: str) -> Optional[dict[str, Any]]:
-    """Get a single entity by ID (searches filename)."""
+    """Get a single entity by ID (exact match in filename)."""
+    _validate_id(entity_id)
     path = FOLDERS[folder]
     if not path.exists():
         return None
     for f in path.glob('*.md'):
-        if entity_id in f.name:
+        if f'-{entity_id}.' in f.name:
             post = frontmatter.load(str(f))
             return {
                 'data': dict(post.metadata),
@@ -53,6 +70,7 @@ def get_entity(folder: str, entity_id: str) -> Optional[dict[str, Any]]:
 
 def get_entity_by_date(folder: str, date_str: str) -> Optional[dict[str, Any]]:
     """Get a date-based entity (e.g., tasks/2026-03-05.md)."""
+    _validate_date(date_str)
     path = FOLDERS[folder] / f'{date_str}.md'
     if not path.exists():
         return None
@@ -119,9 +137,12 @@ def get_active_milestones() -> list[dict[str, Any]]:
     for m in milestones:
         d = m['data']
         if d.get('status') == 'active' and d.get('due_date'):
-            due = date.fromisoformat(str(d['due_date'])[:10])
-            d['d_day'] = (due - today).days
-            result.append(d)
+            try:
+                due = date.fromisoformat(str(d['due_date'])[:10])
+                d['d_day'] = (due - today).days
+                result.append(d)
+            except (ValueError, TypeError):
+                continue
     return sorted(result, key=lambda x: x.get('d_day', 999))
 
 
@@ -189,6 +210,7 @@ def get_consecutive_skips() -> dict[str, int]:
     active_routines = {r['data']['id']: r['data'] for r in routines if r['data'].get('is_active')}
 
     skips: dict[str, int] = {rid: 0 for rid in active_routines}
+    streak_broken: set[str] = set()
     today = date.today()
 
     for days_ago in range(1, 8):  # check last 7 days
@@ -200,6 +222,8 @@ def get_consecutive_skips() -> dict[str, int]:
                 completed_ids.add(c.get('routine_id', ''))
 
         for rid in active_routines:
+            if rid in streak_broken:
+                continue  # already found a completion, skip
             r = active_routines[rid]
             day_of_week = (today - timedelta(days=days_ago)).isoweekday()
             scheduled = r.get('scheduled_days', [1,2,3,4,5,6,7])
@@ -207,7 +231,7 @@ def get_consecutive_skips() -> dict[str, int]:
                 if rid not in completed_ids:
                     skips[rid] += 1
                 else:
-                    break  # streak broken, stop counting
+                    streak_broken.add(rid)  # stop counting for this routine
 
     return {rid: count for rid, count in skips.items() if count > 0}
 
@@ -300,9 +324,10 @@ def create_date_entity(folder: str, date_str: str, data: dict[str, Any], body: s
 
 def update_entity(folder: str, entity_id: str, updates: dict[str, Any], body: Optional[str] = None) -> Optional[dict[str, Any]]:
     """Update an entity's frontmatter."""
+    _validate_id(entity_id)
     path = FOLDERS[folder]
     for f in path.glob('*.md'):
-        if entity_id in f.name:
+        if f'-{entity_id}.' in f.name:
             post = frontmatter.load(str(f))
             for k, v in updates.items():
                 post.metadata[k] = v
@@ -388,9 +413,13 @@ def update_profile(updates: dict[str, Any]) -> dict[str, Any]:
 
 def save_context_file(goal_id: str, filename: str, content: bytes) -> Path:
     """Save a context-data file for a goal."""
+    _validate_id(goal_id)
+    safe_filename = Path(filename).name  # strip any directory traversal
+    if not safe_filename or safe_filename.startswith('.'):
+        raise ValueError(f'Invalid filename: {filename}')
     context_dir = FOLDERS['goals'] / goal_id / 'context-data'
     context_dir.mkdir(parents=True, exist_ok=True)
-    filepath = context_dir / filename
+    filepath = context_dir / safe_filename
     filepath.write_bytes(content)
     return filepath
 

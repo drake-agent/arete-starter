@@ -53,14 +53,37 @@ function pruneWindow<T extends { ts: number }>(arr: T[], windowMs: number): T[] 
   return arr.filter(e => e.ts > cutoff)
 }
 
-function hashPrompt(prompt: string): string {
-  // Simple djb2 hash — good enough for dedup
+const MAX_CACHE_SIZE = 1000
+
+export function hashPrompt(prompt: string): string {
+  // djb2 hash over full string for better collision resistance
   let h = 5381
-  for (let i = 0; i < Math.min(prompt.length, 2000); i++) {
+  for (let i = 0; i < prompt.length; i++) {
     h = ((h << 5) + h) ^ prompt.charCodeAt(i)
     h = h >>> 0
   }
   return h.toString(16)
+}
+
+function pruneCache(): void {
+  // Evict oldest entries when cache exceeds limit
+  if (state.hashCache.size > MAX_CACHE_SIZE) {
+    const entries = [...state.hashCache.entries()].sort((a, b) => a[1].ts - b[1].ts)
+    const toRemove = entries.slice(0, entries.length - MAX_CACHE_SIZE)
+    for (const [key] of toRemove) {
+      state.hashCache.delete(key)
+    }
+  }
+  // Evict stale callerCounts keys
+  const cutoff = now() - VOLUME_WINDOW_MS
+  for (const [key, arr] of state.callerCounts) {
+    const live = arr.filter(e => e.ts > cutoff)
+    if (live.length === 0) {
+      state.callerCounts.delete(key)
+    } else {
+      state.callerCounts.set(key, live)
+    }
+  }
 }
 
 export type GovernorResult =
@@ -140,6 +163,8 @@ export function governorRecord(
   if (promptHash && result !== undefined) {
     state.hashCache.set(promptHash, { result, ts: t })
   }
+
+  pruneCache()
 }
 
 /**

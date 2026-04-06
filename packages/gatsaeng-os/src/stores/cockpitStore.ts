@@ -249,7 +249,9 @@ export const useCockpitStore = create<CockpitState>()(
         if (version < 2) {
           // v0/v1 → v2: Migrate pixel-based positions to grid units
           const ROW_HEIGHT = 80
-          const colWidth = (typeof window !== 'undefined' ? Math.max(window.innerWidth - 260, 600) : 900) / 12
+          // Use a safe default for SSR — the exact value doesn't matter since
+          // this migration only runs once during client-side rehydration
+          const colWidth = 900 / 12
           const oldCards = (state.cards as CockpitCard[]) || []
           const cards = oldCards.map((card) => ({
             ...card,

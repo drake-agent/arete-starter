@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { readFile } from 'fs/promises'
 import path from 'path'
 
-const OPENCLAW_WORKSPACE = process.env.OPENCLAW_WORKSPACE || '/Users/drake/.openclaw/workspace'
+const OPENCLAW_WORKSPACE = process.env.OPENCLAW_WORKSPACE || path.join(process.env.HOME || '', '.openclaw/workspace')
 const PENDING_PATH = path.join(OPENCLAW_WORKSPACE, 'Pending.md')
 const MEMORY_PATH = path.join(OPENCLAW_WORKSPACE, 'MEMORY.md')
 const HANDOFF_PATH = path.join(OPENCLAW_WORKSPACE, 'memory/handoff.md')

@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import fs from 'fs'
 import path from 'path'
 
-const OPENCLAW_WORKSPACE = process.env.OPENCLAW_WORKSPACE || '/Users/drake/.openclaw/workspace'
+const OPENCLAW_WORKSPACE = process.env.OPENCLAW_WORKSPACE || path.join(process.env.HOME || '', '.openclaw/workspace')
 const MEETING_INTEL_DIR = path.join(OPENCLAW_WORKSPACE, 'plaud/meeting-intel')
 
 // In-memory cache to avoid re-scanning all files on every request

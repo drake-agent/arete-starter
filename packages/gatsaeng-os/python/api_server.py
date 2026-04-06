@@ -1,8 +1,15 @@
 """FastAPI server for gatsaeng-os Python backend."""
 
-from fastapi import FastAPI, UploadFile, BackgroundTasks
+from fastapi import FastAPI, UploadFile, BackgroundTasks, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 import uvicorn
+
+MAX_UPLOAD_SIZE = 10 * 1024 * 1024  # 10MB
+
+
+class JudgeActionRequest(BaseModel):
+    action: str = ''
 
 import vault_io
 import scoring
@@ -54,7 +61,7 @@ def complete_task(task_id: str):
     """Mark a project task as done."""
     task_data = vault_io.get_entity('tasks', task_id)
     if not task_data:
-        return {'error': 'Not found'}, 404
+        raise HTTPException(status_code=404, detail='Task not found')
 
     vault_io.update_entity('tasks', task_id, {'status': 'done'})
     priority = task_data['data'].get('priority', 'medium')
@@ -69,6 +76,8 @@ def complete_task(task_id: str):
 async def upload_context(goal_id: str, file: UploadFile, bg: BackgroundTasks):
     """Upload context data for Goal Context Agent."""
     content = await file.read()
+    if len(content) > MAX_UPLOAD_SIZE:
+        raise HTTPException(status_code=413, detail=f'File too large (max {MAX_UPLOAD_SIZE // 1024 // 1024}MB)')
     path = vault_io.save_context_file(goal_id, file.filename, content)
 
     # Score for data upload
@@ -93,7 +102,7 @@ def get_goal_analysis(goal_id: str):
     """Get cached goal analysis result."""
     goal = vault_io.read_goal(goal_id)
     if not goal:
-        return {'error': 'Not found'}, 404
+        raise HTTPException(status_code=404, detail='Goal not found')
     return {
         'ai_diagnosis': goal['data'].get('ai_diagnosis'),
         'ai_direction': goal['data'].get('ai_direction'),
@@ -232,9 +241,9 @@ def get_growth_scorecard():
 
 
 @app.post('/api/gyeokguk/judge')
-def judge_action(body: dict):
+def judge_action(body: JudgeActionRequest):
     """Judge a specific action's 격국 contribution."""
-    text = body.get('action', '')
+    text = body.action
     return gyeokguk.judge_action(text)
 
 

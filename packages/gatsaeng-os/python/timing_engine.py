@@ -58,10 +58,10 @@ def get_timing_score_modifier(event_type: str) -> float:
     rating = timing.get('rating', 3)
 
     # 유리한 달에는 보너스, 불리한 달에는 감소 없음 (벌점은 주지 않음)
-    if rating >= 4:
-        return 1.1  # 10% 보너스
-    elif rating == 5:
+    if rating == 5:
         return 1.2  # 20% 보너스
+    elif rating >= 4:
+        return 1.1  # 10% 보너스
 
     return 1.0
 

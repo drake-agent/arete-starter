@@ -1,8 +1,11 @@
 """Goal Context Agent — Claude API를 사용한 목표 진단 + 마일스톤 제안."""
 
+import logging
 from anthropic import Anthropic
 from typing import Optional
 import json
+
+logger = logging.getLogger(__name__)
 
 import vault_io
 from config import ANTHROPIC_API_KEY, AGENT_MODEL, LIMITS
@@ -114,16 +117,19 @@ def analyze_goal(goal_id: str) -> Optional[dict]:
     if not context:
         return None
 
-    response = client.messages.create(
-        model=AGENT_MODEL,
-        max_tokens=1024,
-        system=SYSTEM_PROMPT,
-        messages=[
-            {'role': 'user', 'content': context}
-        ],
-    )
-
-    text = response.content[0].text
+    try:
+        response = client.messages.create(
+            model=AGENT_MODEL,
+            max_tokens=1024,
+            system=SYSTEM_PROMPT,
+            messages=[
+                {'role': 'user', 'content': context}
+            ],
+        )
+        text = response.content[0].text
+    except Exception as e:
+        logger.error(f'Anthropic API call failed for goal {goal_id}: {e}')
+        return None
 
     # Parse JSON from response
     try:

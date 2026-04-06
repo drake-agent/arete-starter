@@ -9,7 +9,6 @@
 
 from datetime import date, datetime
 from typing import Optional
-from korean_lunar_calendar import KoreanLunarCalendar
 
 # ── 기본 데이터 ──────────────────────────────────────────────────
 

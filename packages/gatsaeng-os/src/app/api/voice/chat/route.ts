@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import OpenAI from 'openai'
-import { governorCheck, governorRecord, estimateCost } from '@/lib/llm-governor'
+import { governorCheck, governorRecord, estimateCost, hashPrompt } from '@/lib/llm-governor'
 
 const openai = new OpenAI()
 
@@ -28,9 +28,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ reply: (check.result as { reply: string }).reply })
     }
 
+    const safeHistory = (history || [])
+      .filter((h): h is { role: 'user' | 'assistant'; content: string } =>
+        h.role === 'user' || h.role === 'assistant'
+      )
+      .slice(-10)
+
     const messages: OpenAI.ChatCompletionMessageParam[] = [
       { role: 'system', content: SYSTEM_PROMPT },
-      ...history.slice(-10),
+      ...safeHistory,
       { role: 'user', content: message },
     ]
 
@@ -41,7 +47,7 @@ export async function POST(req: NextRequest) {
     })
 
     const reply = completion.choices[0]?.message?.content ?? ''
-    governorRecord('voice/chat', estimateCost('gpt-4o', message.length), undefined, { reply })
+    governorRecord('voice/chat', estimateCost('gpt-4o', message.length), hashPrompt(message), { reply })
     return NextResponse.json({ reply })
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'chat failed'

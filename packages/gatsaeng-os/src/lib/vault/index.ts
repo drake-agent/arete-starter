@@ -5,6 +5,35 @@ import { FOLDERS, PROFILE_PATH, type FolderKey } from './config'
 import { parseMarkdown, safeParseMarkdown, stringifyMarkdown } from './frontmatter'
 import type { ZodSchema } from 'zod'
 
+const SAFE_ID_RE = /^[a-zA-Z0-9_-]+$/
+const SAFE_DATE_RE = /^\d{4}-\d{2}-\d{2}$/
+
+function validateId(id: string): string {
+  if (!SAFE_ID_RE.test(id)) {
+    throw new Error(`Invalid entity id: ${id}`)
+  }
+  return id
+}
+
+function validateDate(date: string): string {
+  if (!SAFE_DATE_RE.test(date)) {
+    throw new Error(`Invalid date format: ${date}`)
+  }
+  return date
+}
+
+const DANGEROUS_KEYS = new Set(['__proto__', 'constructor', 'prototype'])
+
+function sanitizeData<T extends object>(data: T): T {
+  const clean = {} as Record<string, unknown>
+  for (const [key, value] of Object.entries(data)) {
+    if (!DANGEROUS_KEYS.has(key)) {
+      clean[key] = value
+    }
+  }
+  return clean as T
+}
+
 async function ensureDir(dirPath: string): Promise<void> {
   await fs.mkdir(dirPath, { recursive: true })
 }
@@ -40,9 +69,10 @@ export async function getEntity<T>(
   id: string,
   schema?: ZodSchema<T>
 ): Promise<{ data: T; content: string } | null> {
+  const safeId = validateId(id)
   const dirPath = FOLDERS[folder]
   const files = await fs.readdir(dirPath)
-  const target = files.find(f => f.includes(id) && f.endsWith('.md'))
+  const target = files.find(f => f.includes(`-${safeId}.`) && f.endsWith('.md'))
 
   if (!target) return null
 
@@ -55,8 +85,9 @@ export async function getEntityByDate<T>(
   date: string,
   schema?: ZodSchema<T>
 ): Promise<{ data: T; content: string } | null> {
+  const safeDate = validateDate(date)
   const dirPath = FOLDERS[folder]
-  const filePath = path.join(dirPath, `${date}.md`)
+  const filePath = path.join(dirPath, `${safeDate}.md`)
 
   try {
     const raw = await fs.readFile(filePath, 'utf-8')
@@ -75,7 +106,7 @@ export async function createEntity<T extends object>(
   await ensureDir(dirPath)
 
   const id = data.id || nanoid(10)
-  const entityData = { ...data, id } as T
+  const entityData = sanitizeData({ ...data, id }) as T
   const prefix = folder.replace(/s$/, '').replace(/Logs$/, '').replace(/Sessions$/, 'session')
   const filename = `${prefix}-${id}.md`
   const filePath = path.join(dirPath, filename)
@@ -107,9 +138,10 @@ export async function updateEntity<T extends object>(
   updates: Partial<T>,
   body?: string
 ): Promise<T | null> {
+  const safeId = validateId(id)
   const dirPath = FOLDERS[folder]
   const files = await fs.readdir(dirPath)
-  const target = files.find(f => f.includes(id) && f.endsWith('.md'))
+  const target = files.find(f => f.includes(`-${safeId}.`) && f.endsWith('.md'))
 
   if (!target) return null
 
@@ -117,7 +149,7 @@ export async function updateEntity<T extends object>(
   const raw = await fs.readFile(filePath, 'utf-8')
   const parsed = parseMarkdown<T>(raw)
 
-  const updated = { ...parsed.data, ...updates } as T
+  const updated = sanitizeData({ ...parsed.data, ...updates }) as T
   const newBody = body !== undefined ? body : parsed.content
   const content = stringifyMarkdown(updated as object, newBody)
   await fs.writeFile(filePath, content, 'utf-8')
@@ -141,9 +173,10 @@ export async function updateDateEntity<T extends object>(
 }
 
 export async function deleteEntity(folder: FolderKey, id: string): Promise<boolean> {
+  const safeId = validateId(id)
   const dirPath = FOLDERS[folder]
   const files = await fs.readdir(dirPath)
-  const target = files.find(f => f.includes(id) && f.endsWith('.md'))
+  const target = files.find(f => f.includes(`-${safeId}.`) && f.endsWith('.md'))
 
   if (!target) return false
 
@@ -161,7 +194,7 @@ export async function updateProfile<T extends object>(
 ): Promise<T> {
   const raw = await fs.readFile(PROFILE_PATH, 'utf-8')
   const parsed = parseMarkdown<T>(raw)
-  const updated = { ...parsed.data, ...updates } as T
+  const updated = sanitizeData({ ...parsed.data, ...updates }) as T
   const content = stringifyMarkdown(updated as object, parsed.content)
   await fs.writeFile(PROFILE_PATH, content, 'utf-8')
   return updated

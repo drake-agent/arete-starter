@@ -5,7 +5,7 @@ import { inferCategory } from '@/lib/calendar/inferCategory'
 
 const execFileAsync = promisify(execFile)
 
-const OPENCLAW_WORKSPACE = process.env.OPENCLAW_WORKSPACE || '/Users/drake/.openclaw/workspace'
+const OPENCLAW_WORKSPACE = process.env.OPENCLAW_WORKSPACE || path.join(process.env.HOME || '', '.openclaw/workspace')
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)

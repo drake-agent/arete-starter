@@ -125,7 +125,8 @@ function InstrumentStrip({
       </div>
       <div className="flex flex-col gap-2 bg-white/[0.01] p-2.5">
         {axes.map(axis => {
-          const meta = AXIS_META.find(m => m.id === axis.id)!
+          const meta = AXIS_META.find(m => m.id === axis.id)
+          if (!meta) return null
           const active = hoveredAxisId === axis.id
           return (
             <Link
@@ -177,11 +178,16 @@ function InstrumentStrip({
 }
 
 export function HudDashboard() {
-  const wsName = useCockpitStore(s => s.workspaces.find(w => w.id === s.activeWorkspaceId)?.name ?? '대시보드')
-  const wsIcon = useCockpitStore(s => s.workspaces.find(w => w.id === s.activeWorkspaceId)?.icon)
-  const wsSpecial = useCockpitStore(s => s.workspaces.find(w => w.id === s.activeWorkspaceId)?.special)
-  const isBase = useCockpitStore(s => s.activeWorkspaceId === 'ws-base')
-  const cardCount = useCockpitStore(s => s.workspaces.find(w => w.id === s.activeWorkspaceId)?.cards.length ?? 0)
+  const { wsName, wsIcon, wsSpecial, isBase, cardCount } = useCockpitStore(s => {
+    const ws = s.workspaces.find(w => w.id === s.activeWorkspaceId)
+    return {
+      wsName: ws?.name ?? '대시보드',
+      wsIcon: ws?.icon,
+      wsSpecial: ws?.special,
+      isBase: s.activeWorkspaceId === 'ws-base',
+      cardCount: ws?.cards.length ?? 0,
+    }
+  })
   const setActiveWorkspace = useCockpitStore(s => s.setActiveWorkspace)
   const goToBase = () => setActiveWorkspace('ws-base')
   const [hoveredAxisId, setHoveredAxisId] = useState<string | null>(null)
@@ -289,7 +295,8 @@ export function HudDashboard() {
 
           <div className="grid w-full grid-cols-2 gap-2 sm:grid-cols-3 lg:hidden">
             {radarAxes.map(axis => {
-              const meta = AXIS_META.find(m => m.id === axis.id)!
+              const meta = AXIS_META.find(m => m.id === axis.id)
+          if (!meta) return null
               return <HudAxisWidget key={axis.id} axis={axis} href={meta.href} icon={meta.icon} onHover={setHoveredAxisId} />
             })}
           </div>
