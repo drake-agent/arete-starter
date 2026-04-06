@@ -1,7 +1,7 @@
 {
   "name": "create-arete-workspace",
-  "version": "0.3.0",
-  "description": "Set up an ARETE AI Operating System workspace in 5 minutes",
+  "version": "0.4.0",
+  "description": "Set up an ARETE AI Operating System workspace in 5 minutes — supports OpenClaw and Hermes (Anthropic) runtimes",
   "type": "module",
   "bin": {
     "create-arete-workspace": "./bin/create.js",
@@ -20,6 +20,8 @@
     "arete",
     "ai",
     "openclaw",
+    "hermes",
+    "anthropic",
     "agent",
     "workspace",
     "gatsaeng",
