@@ -156,38 +156,63 @@ def run(goal_id: str) -> dict:
     if not result:
         return {'error': 'Analysis failed or API key missing'}
 
-    # Update goal with AI fields
+    # Only allowlisted fields from LLM output flow into the vault.
+    # Coerce types + truncate strings to bounded lengths.
+    def _str(v, max_len=2000):
+        return (str(v) if v is not None else '')[:max_len]
+
+    def _iso_date(v):
+        s = _str(v, 32)
+        return s if re.match(r'^\d{4}-\d{2}-\d{2}', s) else ''
+
+    import re
+
     updates = {}
     if result.get('ai_diagnosis'):
-        updates['ai_diagnosis'] = result['ai_diagnosis']
+        updates['ai_diagnosis'] = _str(result['ai_diagnosis'])
     if result.get('ai_direction'):
-        updates['ai_direction'] = result['ai_direction']
+        updates['ai_direction'] = _str(result['ai_direction'])
     if result.get('ai_next_review'):
-        updates['ai_next_review'] = result['ai_next_review']
+        updates['ai_next_review'] = _iso_date(result['ai_next_review'])
 
     if updates:
-        vault_io.update_entity('goals', goal_id, updates)
+        try:
+            vault_io.update_entity('goals', goal_id, updates)
+        except ValueError as e:
+            logger.error(f'Goal update rejected for {goal_id}: {e}')
 
-    # Create suggested milestones (respecting limit)
+    # Create suggested milestones (respecting limit, with coercion)
     created_milestones = []
     existing = vault_io.get_active_milestones()
     goal_ms_count = len([m for m in existing if m.get('goal_id') == goal_id])
 
-    for ms in result.get('suggested_milestones', []):
+    for ms in result.get('suggested_milestones', []) or []:
         if goal_ms_count >= LIMITS['MAX_MILESTONES_PER_GOAL']:
             break
-        new_ms = vault_io.create_entity('milestones', {
-            'goal_id': goal_id,
-            'title': ms.get('title', ''),
-            'target_value': ms.get('target_value', 0),
-            'current_value': 0,
-            'unit': ms.get('unit', ''),
-            'due_date': ms.get('due_date', ''),
-            'status': 'active',
-            'created_by': 'ai',
-        })
-        created_milestones.append(new_ms)
-        goal_ms_count += 1
+        if not isinstance(ms, dict):
+            continue
+        try:
+            target_value = float(ms.get('target_value') or 0)
+        except (TypeError, ValueError):
+            target_value = 0
+        title = _str(ms.get('title'), 200)
+        if not title:
+            continue
+        try:
+            new_ms = vault_io.create_entity('milestones', {
+                'goal_id': goal_id,
+                'title': title,
+                'target_value': target_value,
+                'current_value': 0,
+                'unit': _str(ms.get('unit'), 20),
+                'due_date': _iso_date(ms.get('due_date')),
+                'status': 'active',
+                'created_by': 'ai',
+            })
+            created_milestones.append(new_ms)
+            goal_ms_count += 1
+        except ValueError as e:
+            logger.error(f'Milestone creation rejected: {e}')
 
     return {
         'diagnosis': result.get('ai_diagnosis'),

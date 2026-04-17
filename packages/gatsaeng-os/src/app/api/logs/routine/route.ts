@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { safeJson, serverError } from '@/lib/safeJson'
 import { getEntityByDate, createDateEntity, updateDateEntity } from '@/lib/vault'
 import { routineLogSchema } from '@/lib/vault/schemas'
 import type { RoutineLog } from '@/types'
@@ -13,7 +14,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const body = await request.json()
+  const [body, _err] = await safeJson(request); if (_err) return _err
   const date = body.date || new Date().toISOString().split('T')[0]
 
   const existing = await getEntityByDate<RoutineLog>('routineLogs', date, routineLogSchema)

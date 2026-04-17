@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { safeJson, serverError } from '@/lib/safeJson'
 import { getEntityByDate, createDateEntity, updateDateEntity } from '@/lib/vault'
 import { dailyManifestSchema } from '@/lib/vault/schemas'
 import type { DailyManifest } from '@/types'
@@ -26,7 +27,7 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const body = await req.json()
+  const [body, _err] = await safeJson(req); if (_err) return _err
   const date = body.date || format(new Date(), 'yyyy-MM-dd')
 
   const existing = await getEntityByDate<DailyManifest>('tasks', date)

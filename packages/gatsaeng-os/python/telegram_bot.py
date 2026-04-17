@@ -24,9 +24,12 @@ logger = logging.getLogger(__name__)
 
 
 def is_authorized(update: Update) -> bool:
-    """Only allow configured chat_id. Fail-closed when TELEGRAM_CHAT_ID is not set."""
+    """Only allow configured chat_id. Fail-closed when TELEGRAM_CHAT_ID is not set
+    or when update doesn't carry a chat (e.g., channel posts without effective_chat)."""
     if not TELEGRAM_CHAT_ID:
         logger.warning('TELEGRAM_CHAT_ID not set — rejecting all messages for safety')
+        return False
+    if update.effective_chat is None:
         return False
     return str(update.effective_chat.id) == TELEGRAM_CHAT_ID.replace('tg:', '')
 

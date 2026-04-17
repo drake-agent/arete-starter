@@ -1,7 +1,10 @@
 """Obsidian Vault I/O — Python mirror of Node.js vault/index.ts"""
 
 import re
+import fcntl
+import os
 import frontmatter
+from contextlib import contextmanager
 from pathlib import Path
 from datetime import date, datetime, timedelta
 from typing import Optional, Any
@@ -9,6 +12,23 @@ import yaml
 import uuid
 
 from config import FOLDERS, PROFILE_PATH, VAULT_PATH
+
+
+@contextmanager
+def _file_lock(path: Path):
+    """Advisory exclusive file lock (flock-based). Single-process, multi-thread
+    and multi-worker safe on POSIX. Creates a .lock sidecar."""
+    lock_path = path.with_suffix(path.suffix + '.lock')
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(str(lock_path), os.O_CREAT | os.O_RDWR, 0o600)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        yield
+    finally:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+        finally:
+            os.close(fd)
 
 _SAFE_ID_RE = re.compile(r'^[a-zA-Z0-9_-]+$')
 _SAFE_DATE_RE = re.compile(r'^\d{4}-\d{2}-\d{2}$')
@@ -166,8 +186,11 @@ def get_current_timing() -> Optional[dict[str, Any]]:
         start = d.get('period_start', '')
         end = d.get('period_end', '')
         if start and end:
-            start_date = date.fromisoformat(str(start)[:10])
-            end_date = date.fromisoformat(str(end)[:10])
+            try:
+                start_date = date.fromisoformat(str(start)[:10])
+                end_date = date.fromisoformat(str(end)[:10])
+            except (ValueError, TypeError):
+                continue
             if start_date <= today <= end_date:
                 return d
     return None
@@ -269,6 +292,7 @@ def read_last_review() -> Optional[dict[str, Any]]:
 
 def read_context_data(goal_id: str) -> list[dict[str, Any]]:
     """Read context-data files for a goal."""
+    _validate_id(goal_id)
     context_dir = FOLDERS['goals'] / goal_id / 'context-data'
     if not context_dir.exists():
         return []
@@ -297,75 +321,102 @@ def read_recent_tasks(days: int = 14) -> list[dict[str, Any]]:
 
 # ── Write Operations ──
 
+_DANGEROUS_KEYS = {'__proto__', '__class__', '__dict__'}
+
+
+def _sanitize(value):
+    if isinstance(value, dict):
+        return {k: _sanitize(v) for k, v in value.items() if k not in _DANGEROUS_KEYS}
+    if isinstance(value, list):
+        return [_sanitize(v) for v in value]
+    return value
+
+
 def create_entity(folder: str, data: dict[str, Any], body: str = '') -> dict[str, Any]:
     """Create a new entity file."""
     path = _ensure_dir(folder)
     entity_id = data.get('id') or _gen_id()
+    _validate_id(entity_id)
+    data = _sanitize(data)
     data['id'] = entity_id
 
     prefix = folder.rstrip('s')
     filename = f'{prefix}-{entity_id}.md'
+    filepath = path / filename
+
+    if filepath.exists():
+        raise ValueError(f'Entity with id already exists: {entity_id}')
 
     post = frontmatter.Post(body, **data)
-    filepath = path / filename
     filepath.write_text(frontmatter.dumps(post), encoding='utf-8')
 
     return data
 
 
 def create_date_entity(folder: str, date_str: str, data: dict[str, Any], body: str = '') -> dict[str, Any]:
-    """Create a date-based entity file."""
+    """Create a date-based entity file (locked)."""
+    _validate_date(date_str)
     path = _ensure_dir(folder)
-    post = frontmatter.Post(body, **data)
+    data = _sanitize(data)
     filepath = path / f'{date_str}.md'
-    filepath.write_text(frontmatter.dumps(post), encoding='utf-8')
+    with _file_lock(filepath):
+        post = frontmatter.Post(body, **data)
+        filepath.write_text(frontmatter.dumps(post), encoding='utf-8')
     return data
 
 
 def update_entity(folder: str, entity_id: str, updates: dict[str, Any], body: Optional[str] = None) -> Optional[dict[str, Any]]:
-    """Update an entity's frontmatter."""
+    """Update an entity's frontmatter (locked, read-modify-write)."""
     _validate_id(entity_id)
+    updates = _sanitize(updates)
     path = FOLDERS[folder]
     for f in path.glob('*.md'):
         if f'-{entity_id}.' in f.name:
-            post = frontmatter.load(str(f))
-            for k, v in updates.items():
-                post.metadata[k] = v
-            if body is not None:
-                post.content = body
-            f.write_text(frontmatter.dumps(post), encoding='utf-8')
-            return dict(post.metadata)
+            with _file_lock(f):
+                post = frontmatter.load(str(f))
+                for k, v in updates.items():
+                    post.metadata[k] = v
+                if body is not None:
+                    post.content = body
+                f.write_text(frontmatter.dumps(post), encoding='utf-8')
+                return dict(post.metadata)
     return None
 
 
 def check_routine(routine_id: str) -> dict[str, Any]:
-    """Mark a routine as completed today."""
+    """Mark a routine as completed today (atomic read-modify-write)."""
+    _validate_id(routine_id)
     today = date.today().isoformat()
     now = datetime.now().isoformat()
 
-    log = get_entity_by_date('routine_logs', today)
+    log_path = FOLDERS['routine_logs'] / f'{today}.md'
+    FOLDERS['routine_logs'].mkdir(parents=True, exist_ok=True)
 
-    if log:
-        completions = log['data'].get('completions', [])
-        # check if already completed
-        if any(c.get('routine_id') == routine_id for c in completions):
-            return log['data']
-        completions.append({
-            'routine_id': routine_id,
-            'completed_at': now,
-        })
-        log['data']['completions'] = completions
-        create_date_entity('routine_logs', today, log['data'])
-    else:
-        data = {
-            'date': today,
-            'completions': [{
+    with _file_lock(log_path):
+        log = get_entity_by_date('routine_logs', today)
+        if log:
+            completions = log['data'].get('completions', [])
+            if any(c.get('routine_id') == routine_id for c in completions):
+                return log['data']
+            completions.append({
                 'routine_id': routine_id,
                 'completed_at': now,
-            }],
-        }
-        create_date_entity('routine_logs', today, data)
-        log = {'data': data}
+            })
+            log['data']['completions'] = completions
+            # inline write to stay within the same lock
+            post = frontmatter.Post('', **_sanitize(log['data']))
+            log_path.write_text(frontmatter.dumps(post), encoding='utf-8')
+        else:
+            data = {
+                'date': today,
+                'completions': [{
+                    'routine_id': routine_id,
+                    'completed_at': now,
+                }],
+            }
+            post = frontmatter.Post('', **_sanitize(data))
+            log_path.write_text(frontmatter.dumps(post), encoding='utf-8')
+            log = {'data': data}
 
     # update streak
     routine = get_entity('routines', routine_id)
@@ -381,34 +432,44 @@ def check_routine(routine_id: str) -> dict[str, Any]:
 
 
 def update_today_score(delta: int) -> int:
-    """Add points to today's score."""
+    """Add points to today's score (locked)."""
     today = date.today().isoformat()
-    manifest = read_today_tasks()
-    new_score = manifest['data'].get('gatsaeng_score', 0) + delta
-    manifest['data']['gatsaeng_score'] = new_score
-    create_date_entity('tasks', today, manifest['data'], manifest.get('content', ''))
+    manifest_path = FOLDERS['tasks'] / f'{today}.md'
+    FOLDERS['tasks'].mkdir(parents=True, exist_ok=True)
 
-    # update profile total
-    profile = read_profile()
-    profile['total_score'] = profile.get('total_score', 0) + delta
-    update_profile(profile)
+    with _file_lock(manifest_path):
+        manifest = read_today_tasks()
+        new_score = manifest['data'].get('gatsaeng_score', 0) + delta
+        manifest['data']['gatsaeng_score'] = new_score
+        post = frontmatter.Post(manifest.get('content', ''), **_sanitize(manifest['data']))
+        manifest_path.write_text(frontmatter.dumps(post), encoding='utf-8')
+
+    # update profile total (separate lock)
+    with _file_lock(PROFILE_PATH):
+        profile = read_profile()
+        profile['total_score'] = profile.get('total_score', 0) + delta
+        PROFILE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        post = frontmatter.Post('', **_sanitize(profile))
+        PROFILE_PATH.write_text(frontmatter.dumps(post), encoding='utf-8')
 
     return new_score
 
 
 def update_profile(updates: dict[str, Any]) -> dict[str, Any]:
-    """Update user profile."""
-    if PROFILE_PATH.exists():
-        post = frontmatter.load(str(PROFILE_PATH))
-        for k, v in updates.items():
-            post.metadata[k] = v
-        PROFILE_PATH.write_text(frontmatter.dumps(post), encoding='utf-8')
-        return dict(post.metadata)
-    else:
-        post = frontmatter.Post('', **updates)
-        PROFILE_PATH.parent.mkdir(parents=True, exist_ok=True)
-        PROFILE_PATH.write_text(frontmatter.dumps(post), encoding='utf-8')
-        return updates
+    """Update user profile (locked)."""
+    updates = _sanitize(updates)
+    PROFILE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with _file_lock(PROFILE_PATH):
+        if PROFILE_PATH.exists():
+            post = frontmatter.load(str(PROFILE_PATH))
+            for k, v in updates.items():
+                post.metadata[k] = v
+            PROFILE_PATH.write_text(frontmatter.dumps(post), encoding='utf-8')
+            return dict(post.metadata)
+        else:
+            post = frontmatter.Post('', **updates)
+            PROFILE_PATH.write_text(frontmatter.dumps(post), encoding='utf-8')
+            return updates
 
 
 def save_context_file(goal_id: str, filename: str, content: bytes) -> Path:

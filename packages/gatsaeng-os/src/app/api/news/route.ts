@@ -1,17 +1,49 @@
 import { NextResponse } from 'next/server'
 
+const MAX_QUERY_LENGTH = 128
+const MAX_RSS_BYTES = 512 * 1024 // 512KB — Google News RSS is ~50KB typical
+const FETCH_TIMEOUT_MS = 8000
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
-  const query = searchParams.get('q') || ''
+  const rawQuery = searchParams.get('q') || ''
+  const query = rawQuery.slice(0, MAX_QUERY_LENGTH)
 
   // query가 있으면 검색, 없으면 한국 주요 뉴스
   const rssUrl = query
     ? `https://news.google.com/rss/search?q=${encodeURIComponent(query)}&hl=ko&gl=KR&ceid=KR:ko`
     : `https://news.google.com/rss?hl=ko&gl=KR&ceid=KR:ko`
 
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
   try {
-    const res = await fetch(rssUrl, { next: { revalidate: 300 } }) // 5분 캐시
-    const xml = await res.text()
+    const res = await fetch(rssUrl, {
+      next: { revalidate: 300 },
+      signal: controller.signal,
+    })
+    // Bound the response size to prevent memory exhaustion on upstream misbehavior
+    const reader = res.body?.getReader()
+    if (!reader) {
+      clearTimeout(timer)
+      return NextResponse.json([])
+    }
+    const chunks: Uint8Array[] = []
+    let total = 0
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      total += value.byteLength
+      if (total > MAX_RSS_BYTES) {
+        reader.cancel()
+        clearTimeout(timer)
+        return NextResponse.json([])
+      }
+      chunks.push(value)
+    }
+    clearTimeout(timer)
+    const xml = new TextDecoder().decode(new Uint8Array(
+      chunks.reduce<number[]>((acc, c) => { acc.push(...c); return acc }, [])
+    ))
 
     // 간단한 XML 파싱 (DOMParser 대신 regex로)
     const items: { title: string; link: string; pubDate: string; source: string }[] = []
@@ -29,7 +61,9 @@ export async function GET(request: Request) {
     }
 
     return NextResponse.json(items)
-  } catch {
+  } catch (e) {
+    console.error('[news]', e)
+    clearTimeout(timer)
     return NextResponse.json([])
   }
 }

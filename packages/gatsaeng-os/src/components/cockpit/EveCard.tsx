@@ -2,6 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query'
 import { AlertCircle, CheckCircle2, Sparkles, ClipboardList, Lightbulb } from 'lucide-react'
+import { apiFetch } from '@/lib/apiFetch'
 
 interface PendingItem {
   id: string
@@ -28,11 +29,7 @@ interface EveCardData {
 export function EveCard() {
   const { data, isLoading, isError, dataUpdatedAt } = useQuery<EveCardData>({
     queryKey: ['cockpit-eve'],
-    queryFn: async () => {
-      const res = await fetch('/api/cockpit/eve')
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      return res.json() as Promise<EveCardData>
-    },
+    queryFn: () => apiFetch<EveCardData>('/api/cockpit/eve'),
     staleTime: 1000 * 60 * 5,
     refetchInterval: 1000 * 60 * 5,
   })

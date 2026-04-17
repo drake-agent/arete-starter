@@ -24,14 +24,24 @@ function validateDate(date: string): string {
 
 const DANGEROUS_KEYS = new Set(['__proto__', 'constructor', 'prototype'])
 
-function sanitizeData<T extends object>(data: T): T {
-  const clean = {} as Record<string, unknown>
-  for (const [key, value] of Object.entries(data)) {
-    if (!DANGEROUS_KEYS.has(key)) {
-      clean[key] = value
-    }
+function sanitizeValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(sanitizeValue)
   }
-  return clean as T
+  if (value !== null && typeof value === 'object') {
+    const clean: Record<string, unknown> = {}
+    for (const [k, v] of Object.entries(value)) {
+      if (!DANGEROUS_KEYS.has(k)) {
+        clean[k] = sanitizeValue(v)
+      }
+    }
+    return clean
+  }
+  return value
+}
+
+function sanitizeData<T extends object>(data: T): T {
+  return sanitizeValue(data) as T
 }
 
 async function ensureDir(dirPath: string): Promise<void> {
@@ -105,11 +115,22 @@ export async function createEntity<T extends object>(
   const dirPath = FOLDERS[folder]
   await ensureDir(dirPath)
 
-  const id = data.id || nanoid(10)
+  const id = data.id ? validateId(data.id) : nanoid(10)
   const entityData = sanitizeData({ ...data, id }) as T
   const prefix = folder.replace(/s$/, '').replace(/Logs$/, '').replace(/Sessions$/, 'session')
   const filename = `${prefix}-${id}.md`
   const filePath = path.join(dirPath, filename)
+
+  // Collision check — createEntity should not silently overwrite
+  try {
+    await fs.access(filePath)
+    throw new Error(`Entity with id already exists: ${id}`)
+  } catch (e) {
+    // ENOENT is expected (good); anything else is the thrown error above
+    if (e && typeof e === 'object' && 'code' in e && e.code !== 'ENOENT') {
+      throw e
+    }
+  }
 
   const content = stringifyMarkdown(entityData as object, body)
   await fs.writeFile(filePath, content, 'utf-8')
@@ -122,10 +143,11 @@ export async function createDateEntity<T extends object>(
   date: string,
   data: T
 ): Promise<T> {
+  const safeDate = validateDate(date)
   const dirPath = FOLDERS[folder]
   await ensureDir(dirPath)
 
-  const filePath = path.join(dirPath, `${date}.md`)
+  const filePath = path.join(dirPath, `${safeDate}.md`)
   const content = stringifyMarkdown(data as object)
   await fs.writeFile(filePath, content, 'utf-8')
 
@@ -162,10 +184,11 @@ export async function updateDateEntity<T extends object>(
   date: string,
   data: T
 ): Promise<T> {
+  const safeDate = validateDate(date)
   const dirPath = FOLDERS[folder]
   await ensureDir(dirPath)
 
-  const filePath = path.join(dirPath, `${date}.md`)
+  const filePath = path.join(dirPath, `${safeDate}.md`)
   const content = stringifyMarkdown(data as object)
   await fs.writeFile(filePath, content, 'utf-8')
 

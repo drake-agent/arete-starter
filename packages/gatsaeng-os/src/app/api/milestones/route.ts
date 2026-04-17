@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { safeJson, serverError } from '@/lib/safeJson'
 import { listEntities, createEntity } from '@/lib/vault'
 import { milestoneSchema } from '@/lib/vault/schemas'
 import type { Milestone } from '@/types'
@@ -21,7 +22,7 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const body = await req.json()
+  const [body, _err] = await safeJson(req); if (_err) return _err
 
   // constraint: max 4 milestones per goal
   if (body.goal_id) {

@@ -2,7 +2,7 @@
 
 import chalk from 'chalk';
 import { checkForUpdate, runUpdate } from '../lib/updater.js';
-import { execSync } from 'child_process';
+import { execSync, execFileSync } from 'child_process';
 import { readFileSync, writeFileSync, existsSync, readdirSync, statSync } from 'fs';
 import { resolve, join } from 'path';
 import { homedir } from 'os';
@@ -124,8 +124,10 @@ function cmdStatus() {
   const memoryDir = resolve(workspacePath, 'memory');
   if (existsSync(memoryDir)) {
     try {
+      // Only match YYYY-MM-DD.md daily logs, not MEMORY.md or similar pinned files
+      const DAILY_RE = /^\d{4}-\d{2}-\d{2}\.md$/;
       const files = readdirSync(memoryDir)
-        .filter((f) => f.endsWith('.md') && !f.startsWith('.'))
+        .filter((f) => DAILY_RE.test(f))
         .sort()
         .reverse();
       if (files.length > 0) {
@@ -232,7 +234,7 @@ function cmdSetupCrons() {
   console.log('');
 
   try {
-    execSync(`bash "${cronScript}"`, { stdio: 'inherit' });
+    execFileSync('bash', [cronScript], { stdio: 'inherit' });
     console.log('');
     console.log(chalk.green('Cron jobs configured!'));
     console.log(chalk.dim('  View with: hermes cron list'));

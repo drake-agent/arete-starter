@@ -44,8 +44,8 @@ export default function LoginPage() {
         return
       }
 
-      router.replace('/')
-      router.refresh()
+      // Full reload to ensure new auth cookie is picked up by middleware
+      // and all client caches (React Query, Zustand) reset cleanly.
       window.location.assign('/')
     } catch {
       setError('Network error')

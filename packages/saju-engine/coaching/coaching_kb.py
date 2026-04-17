@@ -21,15 +21,26 @@ Usage:
 """
 
 import argparse
+import fcntl
 import json
 import os
 from datetime import datetime
 from pathlib import Path
 
 
-KB_ROOT = Path(os.environ.get("COACHING_KB_ROOT", os.path.join(os.getcwd(), "data", "coaching-kb")))
+def _default_root():
+    """Resolve KB root once at import time, relative to this file (not cwd)."""
+    override = os.environ.get("COACHING_KB_ROOT")
+    if override:
+        return Path(override)
+    # Anchor to the package directory so running from any cwd works consistently
+    pkg_root = Path(__file__).resolve().parent.parent
+    return pkg_root / "data" / "coaching-kb"
+
+
+KB_ROOT = _default_root()
 LOG_FILE = KB_ROOT / "coaching_log.jsonl"
-PROFILE_FILE = Path(os.environ.get("USER_PROFILE_PATH", os.path.join(os.getcwd(), "USER-PROFILE.md")))
+PROFILE_FILE = Path(os.environ.get("USER_PROFILE_PATH", str(Path(__file__).resolve().parent.parent / "USER-PROFILE.md")))
 
 
 def ensure_dirs():
@@ -37,11 +48,17 @@ def ensure_dirs():
 
 
 def log_entry(entry: dict):
-    """코칭 기록 1건 추가."""
+    """코칭 기록 1건 추가 (flock-protected against concurrent writers)."""
     ensure_dirs()
     entry['timestamp'] = datetime.now().isoformat()
+    line = json.dumps(entry, ensure_ascii=False) + '\n'
     with open(LOG_FILE, 'a') as f:
-        f.write(json.dumps(entry, ensure_ascii=False) + '\n')
+        fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+        try:
+            f.write(line)
+            f.flush()
+        finally:
+            fcntl.flock(f.fileno(), fcntl.LOCK_UN)
     print(f"✅ 기록: {entry.get('type', '?')} — {entry.get('id', entry.get('dfw', entry.get('pattern', '?')))}")
 
 

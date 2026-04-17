@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { execFile } from 'child_process'
 import { promisify } from 'util'
+import { governorCheck, governorRecord, governorRecordCacheHit, estimateChatCost, hashPrompt } from '@/lib/llm-governor'
+import { safeJson } from '@/lib/safeJson'
 
 const execFileAsync = promisify(execFile)
 
@@ -152,7 +154,8 @@ export async function POST(req: NextRequest) {
   const timer = setTimeout(() => controller.abort(), CARD_BUILDER_TIMEOUT_MS)
 
   try {
-    const body = await req.json()
+    const [body, jsonErr] = await safeJson<{ message?: string }>(req)
+    if (jsonErr) { clearTimeout(timer); return jsonErr }
     const message = typeof body?.message === 'string' ? body.message.trim() : ''
 
     if (!message || message.length > 500) {
@@ -161,6 +164,20 @@ export async function POST(req: NextRequest) {
     }
 
     const fullMessage = `${CARD_BUILDER_PROMPT}\n\n사용자 요청: ${message}`
+
+    // Governor: rate-limit + dedup card-builder (runs LLM via openclaw agent)
+    const cacheKey = hashPrompt(fullMessage)
+    const check = governorCheck('cockpit/card-builder', cacheKey, 'gpt-4o')
+    if (!check.ok) {
+      clearTimeout(timer)
+      console.error(`[cockpit/card-builder] Governor blocked: ${check.reason}`)
+      return NextResponse.json({ error: check.reason }, { status: 429 })
+    }
+    if (check.cached) {
+      clearTimeout(timer)
+      governorRecordCacheHit('cockpit/card-builder')
+      return NextResponse.json(check.result as object)
+    }
 
     let stdout: string
     try {
@@ -206,12 +223,14 @@ export async function POST(req: NextRequest) {
 
     const { cardSpec, cardType, message: eveMessage } = extractCardSpec(agentText)
 
-    return NextResponse.json({
+    const result = {
       cardSpec,
       cardType,
       message: eveMessage,
       raw: (cardSpec || cardType) ? undefined : agentText.slice(0, 500),
-    })
+    }
+    governorRecord('cockpit/card-builder', estimateChatCost('gpt-4o', fullMessage.length, 512), cacheKey, result)
+    return NextResponse.json(result)
   } catch (err) {
     clearTimeout(timer)
     console.error('Card builder error:', err)

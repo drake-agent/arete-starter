@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import OpenAI from 'openai'
-import { governorCheck, governorRecord, estimateCost } from '@/lib/llm-governor'
+import { governorCheck, governorRecord, estimateWhisperCost } from '@/lib/llm-governor'
 
 const openai = new OpenAI()
 const MAX_AUDIO_SIZE = 25 * 1024 * 1024 // 25MB (Whisper API limit)
@@ -27,10 +27,10 @@ export async function POST(req: NextRequest) {
       language: 'ko',
     })
 
-    governorRecord('voice/transcribe', estimateCost('whisper', audio.size))
+    governorRecord('voice/transcribe', estimateWhisperCost(audio.size))
     return NextResponse.json({ text: transcription.text })
   } catch (e) {
-    const msg = e instanceof Error ? e.message : 'transcription failed'
-    return NextResponse.json({ error: msg }, { status: 500 })
+    console.error('[voice/transcribe]', e)
+    return NextResponse.json({ error: 'transcription failed' }, { status: 500 })
   }
 }

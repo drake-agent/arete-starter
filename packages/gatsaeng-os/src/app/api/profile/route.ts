@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { safeJson, serverError } from '@/lib/safeJson'
 import { getProfile, updateProfile } from '@/lib/vault'
 import { profileSchema } from '@/lib/vault/schemas'
 import type { Profile } from '@/types'
@@ -10,7 +11,7 @@ export async function GET() {
 }
 
 export async function PUT(request: Request) {
-  const body = await request.json()
+  const [body, _err] = await safeJson(request); if (_err) return _err
   const updates = { ...body, updated_at: new Date().toISOString() }
   const result = await updateProfile<Profile>(updates)
   return NextResponse.json(result)

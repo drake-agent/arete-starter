@@ -22,6 +22,11 @@ FOLDERS = {
     'sessions': VAULT_PATH / 'sessions',
     'timing': VAULT_PATH / 'timing',
     'routine_logs': VAULT_PATH / 'logs' / 'routine',
+    'energy_logs': VAULT_PATH / 'logs' / 'energy',
+    'focus_sessions': VAULT_PATH / 'logs' / 'focus',
+    'books': VAULT_PATH / 'books',
+    'calendar': VAULT_PATH / 'calendar',
+    'notes': VAULT_PATH / 'notes',
 }
 
 PROFILE_PATH = VAULT_PATH / 'profile.md'

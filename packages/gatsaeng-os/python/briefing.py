@@ -5,7 +5,6 @@ from typing import Optional
 
 import vault_io
 import timing_engine
-import scoring
 
 
 def generate_morning_briefing() -> str:

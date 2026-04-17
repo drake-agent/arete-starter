@@ -86,8 +86,12 @@ const CALM_QUOTES = [
 ]
 
 function CalmRoomView({ onBack }: { onBack: () => void }) {
-  const d = new Date()
-  const quote = CALM_QUOTES[(d.getDate() + d.getMonth() * 31) % CALM_QUOTES.length]
+  // Compute client-side to avoid hydration mismatch on day/month rollover
+  const [quote, setQuote] = useState(CALM_QUOTES[0])
+  useEffect(() => {
+    const d = new Date()
+    setQuote(CALM_QUOTES[(d.getDate() + d.getMonth() * 31) % CALM_QUOTES.length])
+  }, [])
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-10">
       <div className="max-w-md px-6 text-center">
@@ -226,13 +230,22 @@ export function HudDashboard() {
   }), [lifeStatus])
 
   const overall = Math.round(radarAxes.reduce((sum, axis) => sum + axis.value, 0) / Math.max(radarAxes.length, 1))
-  const dashboardTimestamp = new Intl.DateTimeFormat('ko-KR', {
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  }).format(new Date())
+  // Client-only timestamp + greeting — avoid SSR/client hydration mismatch
+  const [dashboardTimestamp, setDashboardTimestamp] = useState('')
+  const [timeGreeting, setTimeGreeting] = useState('GOOD EVENING, DRAKE')
+  useEffect(() => {
+    const update = () => {
+      setDashboardTimestamp(
+        new Intl.DateTimeFormat('ko-KR', {
+          month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false,
+        }).format(new Date())
+      )
+      setTimeGreeting(getTimeGreeting())
+    }
+    update()
+    const id = setInterval(update, 60_000)
+    return () => clearInterval(id)
+  }, [])
 
   if (wsSpecial === 'focus') return <div className="flex h-full flex-col"><FocusModeView onBack={goToBase} /></div>
   if (wsSpecial === 'calm') return <div className="flex h-full flex-col"><CalmRoomView onBack={goToBase} /></div>
@@ -262,7 +275,7 @@ export function HudDashboard() {
 
       <div className="relative mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between shrink-0">
         <div>
-          <h1 className="hud-mono text-sm font-bold tracking-wide text-foreground sm:text-base">{getTimeGreeting()}</h1>
+          <h1 className="hud-mono text-sm font-bold tracking-wide text-foreground sm:text-base" suppressHydrationWarning>{timeGreeting}</h1>
           <p className="hud-label mt-0.5">MISSION CONTROL · 6-AXIS LIFE OS</p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
@@ -318,7 +331,7 @@ export function HudDashboard() {
           <span className="hidden min-[420px]:inline text-[#2f4057]">|</span>
           <span>EVE: ONLINE</span>
           <span className="text-[#2f4057]">|</span>
-          <span className="hidden sm:inline">LAST SYNC: {dashboardTimestamp}</span>
+          <span className="hidden sm:inline" suppressHydrationWarning>LAST SYNC: {dashboardTimestamp}</span>
         </div>
       </div>
     </div>

@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import OpenAI from 'openai'
-import { governorCheck, governorRecord, estimateCost } from '@/lib/llm-governor'
+import { governorCheck, governorRecord, estimateTtsCost } from '@/lib/llm-governor'
+import { safeJson } from '@/lib/safeJson'
 
 const openai = new OpenAI()
 const MAX_TTS_CHARS = 1000
@@ -15,7 +16,9 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    const { text } = (await req.json()) as { text: string }
+    const [body, jsonErr] = await safeJson<{ text?: string }>(req)
+    if (jsonErr) return jsonErr
+    const text = typeof body.text === 'string' ? body.text : ''
     if (!text) {
       return new Response(JSON.stringify({ error: 'text required' }), {
         status: 400,
@@ -36,7 +39,7 @@ export async function POST(req: NextRequest) {
       response_format: 'mp3',
     })
 
-    governorRecord('voice/tts', estimateCost('tts', text.length))
+    governorRecord('voice/tts', estimateTtsCost(text.length))
     return new Response(mp3.body, {
       headers: {
         'Content-Type': 'audio/mpeg',
@@ -44,8 +47,8 @@ export async function POST(req: NextRequest) {
       },
     })
   } catch (e) {
-    const msg = e instanceof Error ? e.message : 'tts failed'
-    return new Response(JSON.stringify({ error: msg }), {
+    console.error('[voice/tts]', e)
+    return new Response(JSON.stringify({ error: 'tts failed' }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' },
     })

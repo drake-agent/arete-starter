@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { safeJson, serverError } from '@/lib/safeJson'
 import { listEntities, createEntity } from '@/lib/vault'
 import { taskSchema } from '@/lib/vault/schemas'
 import type { Task } from '@/types'
@@ -50,7 +51,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const body = await request.json()
+  const [body, _err] = await safeJson(request); if (_err) return _err
   const now = new Date().toISOString()
   const data = {
     ...body,

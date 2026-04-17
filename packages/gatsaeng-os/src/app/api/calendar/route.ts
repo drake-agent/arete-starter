@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { safeJson, serverError } from '@/lib/safeJson'
 import { listEntities, createEntity } from '@/lib/vault'
 import { calendarEventSchema } from '@/lib/vault/schemas'
 import type { CalendarEvent } from '@/types'
@@ -27,7 +28,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: Request) {
-  const body = await request.json()
+  const [body, _err] = await safeJson(request); if (_err) return _err
   const data = {
     ...body,
     created_at: body.created_at || new Date().toISOString(),

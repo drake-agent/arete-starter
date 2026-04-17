@@ -26,7 +26,9 @@ export async function GET(request: Request) {
       category: inferCategory(e),
     }))
     return NextResponse.json(enriched)
-  } catch {
-    return NextResponse.json([], { status: 200 })
+  } catch (e) {
+    console.error('[calendar/apple]', e)
+    // Return empty list but signal degraded state so the client can warn if needed
+    return NextResponse.json([], { status: 200, headers: { 'X-Calendar-Status': 'degraded' } })
   }
 }

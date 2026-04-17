@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { safeJson, serverError } from '@/lib/safeJson'
 import { getEntity, updateEntity, deleteEntity } from '@/lib/vault'
 import { milestoneSchema } from '@/lib/vault/schemas'
 import type { Milestone } from '@/types'
@@ -12,7 +13,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
 
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const body = await req.json()
+  const [body, _err] = await safeJson(req); if (_err) return _err
   const updated = await updateEntity<Milestone>('milestones', id, body)
   if (!updated) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   return NextResponse.json(updated)

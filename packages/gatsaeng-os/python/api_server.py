@@ -1,15 +1,16 @@
 """FastAPI server for gatsaeng-os Python backend."""
 
-from fastapi import FastAPI, UploadFile, BackgroundTasks, HTTPException
+from fastapi import FastAPI, UploadFile, BackgroundTasks, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 import uvicorn
 
 MAX_UPLOAD_SIZE = 10 * 1024 * 1024  # 10MB
+MAX_ACTION_LENGTH = 2000
 
 
 class JudgeActionRequest(BaseModel):
-    action: str = ''
+    action: str = Field(default='', max_length=MAX_ACTION_LENGTH)
 
 import vault_io
 import scoring
@@ -73,11 +74,26 @@ def complete_task(task_id: str):
 
 
 @app.post('/api/goals/{goal_id}/context')
-async def upload_context(goal_id: str, file: UploadFile, bg: BackgroundTasks):
+async def upload_context(goal_id: str, file: UploadFile, bg: BackgroundTasks, request: Request):
     """Upload context data for Goal Context Agent."""
-    content = await file.read()
-    if len(content) > MAX_UPLOAD_SIZE:
+    # Pre-check Content-Length header to reject oversized uploads before reading
+    content_length = request.headers.get('content-length')
+    if content_length and int(content_length) > MAX_UPLOAD_SIZE:
         raise HTTPException(status_code=413, detail=f'File too large (max {MAX_UPLOAD_SIZE // 1024 // 1024}MB)')
+
+    # Streaming read with running size counter (defense in depth)
+    chunks = []
+    total = 0
+    while True:
+        chunk = await file.read(64 * 1024)
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > MAX_UPLOAD_SIZE:
+            raise HTTPException(status_code=413, detail=f'File too large (max {MAX_UPLOAD_SIZE // 1024 // 1024}MB)')
+        chunks.append(chunk)
+    content = b''.join(chunks)
+
     path = vault_io.save_context_file(goal_id, file.filename, content)
 
     # Score for data upload

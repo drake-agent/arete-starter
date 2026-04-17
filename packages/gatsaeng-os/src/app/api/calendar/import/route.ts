@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { safeJson, serverError } from '@/lib/safeJson'
 import { createEntity, listEntities, deleteEntity } from '@/lib/vault'
 import { calendarEventSchema } from '@/lib/vault/schemas'
 import type { CalendarEvent } from '@/types'
@@ -17,11 +18,16 @@ import type { CalendarEvent } from '@/types'
  * }
  */
 export async function POST(request: Request) {
-  const body = await request.json()
+  const [body, _err] = await safeJson(request); if (_err) return _err
   const { events, clear_week, week_start, week_end, created_by = 'telegram' } = body
+
+  const MAX_IMPORT_EVENTS = 500
 
   if (!events || !Array.isArray(events) || events.length === 0) {
     return NextResponse.json({ error: 'events array is required' }, { status: 400 })
+  }
+  if (events.length > MAX_IMPORT_EVENTS) {
+    return NextResponse.json({ error: `Too many events (max ${MAX_IMPORT_EVENTS})` }, { status: 400 })
   }
 
   // Optionally clear existing events in the week range

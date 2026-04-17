@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { safeJson, serverError } from '@/lib/safeJson'
 import { listEntities, createEntity } from '@/lib/vault'
 import { focusSessionSchema } from '@/lib/vault/schemas'
 import type { FocusSession } from '@/types'
@@ -9,7 +10,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const body = await request.json()
+  const [body, _err] = await safeJson(request); if (_err) return _err
   const data = {
     ...body,
     session_type: body.session_type ?? 'pomodoro_25',

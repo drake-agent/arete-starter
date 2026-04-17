@@ -17,17 +17,20 @@ const CALLERS: Record<string, CallerConfig> = {
   'voice/chat': { maxPer10Min: 40 },
   'voice/transcribe': { maxPer10Min: 60 },
   'voice/tts': { maxPer10Min: 60 },
+  'cockpit/card-builder': { maxPer10Min: 20 },
   'default': { maxPer10Min: 200 },
 }
 
-// Estimated cost per 1K tokens (input+output blended)
-const COST_PER_CALL: Record<string, number> = {
-  'gpt-4o': 0.010,
-  'gpt-4o-mini': 0.0003,
-  'whisper': 0.006, // per minute, approximate
-  'tts': 0.015,     // per 1K chars
+// Pricing units are NORMALIZED per caller — each estimate function below
+// returns a USD cost directly, so we don't have to special-case units
+// (chars vs bytes vs minutes) inside estimateCost.
+const COST_PER_1K_TOKENS: Record<string, number> = {
+  'gpt-4o': 0.0125,        // blended input+output
+  'gpt-4o-mini': 0.0006,
   'default': 0.010,
 }
+const WHISPER_PER_MB = 0.006   // conservative: 1MB audio ≈ ~1min
+const TTS_PER_1K_CHARS = 0.015
 
 // --- In-memory state (resets on process restart) ---
 const state = {
@@ -144,6 +147,9 @@ export function governorCheck(
 
 /**
  * Record a completed LLM call (update spend + volume windows).
+ * ALWAYS increments counters, even on cache hits — that's by design:
+ * a cache hit still serves a user, so it counts toward per-caller volume
+ * (just with zero incremental spend). Callers pass cost=0 for cache hits.
  */
 export function governorRecord(
   caller: string,
@@ -168,12 +174,46 @@ export function governorRecord(
 }
 
 /**
- * Estimate cost for a call (rough).
+ * Record a cache-hit serve (volume only, no spend).
+ * Prevents cache-key-collision bypass of per-caller rate limits.
+ */
+export function governorRecordCacheHit(caller: string) {
+  governorRecord(caller, 0)
+}
+
+/**
+ * Chat-model cost estimator. Pass the FULL prompt (system + history + user)
+ * and expected maxTokens for the completion — output is typically more
+ * expensive than input, so we can't ignore it.
+ */
+export function estimateChatCost(
+  model: string,
+  promptChars: number,
+  maxOutputTokens = 256
+): number {
+  const rate = COST_PER_1K_TOKENS[model] ?? COST_PER_1K_TOKENS['default']
+  const inputTokens = promptChars / 4
+  const estTokens = inputTokens + maxOutputTokens
+  return (estTokens / 1000) * rate
+}
+
+/** Whisper cost estimator — billed per minute (~1MB/min conservative). */
+export function estimateWhisperCost(audioBytes: number): number {
+  return (audioBytes / (1024 * 1024)) * WHISPER_PER_MB
+}
+
+/** TTS cost estimator — $0.015 per 1K input characters. */
+export function estimateTtsCost(chars: number): number {
+  return (chars / 1000) * TTS_PER_1K_CHARS
+}
+
+/**
+ * @deprecated Use model-specific estimators. Kept for backward compatibility.
  */
 export function estimateCost(model: string, inputChars: number): number {
-  const rate = COST_PER_CALL[model] ?? COST_PER_CALL['default']
-  const estTokens = inputChars / 4
-  return (estTokens / 1000) * rate
+  if (model === 'whisper') return estimateWhisperCost(inputChars)
+  if (model === 'tts') return estimateTtsCost(inputChars)
+  return estimateChatCost(model, inputChars)
 }
 
 /**

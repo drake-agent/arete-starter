@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '@/lib/apiFetch'
 import type { CalendarEvent } from '@/types'
 
-export function useCalendarEvents(weekStart?: string, weekEnd?: string) {
+export function useCalendarEvents(weekStart?: string, weekEnd?: string, enabled = true) {
   return useQuery({
     queryKey: ['calendar', weekStart, weekEnd],
     queryFn: () => {
@@ -13,7 +13,7 @@ export function useCalendarEvents(weekStart?: string, weekEnd?: string) {
       if (weekEnd) params.set('week_end', weekEnd)
       return apiFetch<CalendarEvent[]>(`/api/calendar?${params}`)
     },
-    enabled: !!weekStart && !!weekEnd,
+    enabled: enabled && !!weekStart && !!weekEnd,
   })
 }
 
