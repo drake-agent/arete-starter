@@ -1,0 +1,20 @@
+# Entity Filing Resolver
+
+Use this table to determine where a new entity belongs.
+
+| Signal type | Primary home | Test |
+|---|---|---|
+| Person | `people/` | Subject is a specific human |
+| Company/org | `companies/` | Subject is an organization |
+| Active workstream | `projects/` | Has deliverables + timeline |
+| Scheduled event | `meetings/` | Has date + participants |
+| Pre-execution concept | `ideas/` | No timeline yet |
+| Recurring observation | `patterns/` | 3+ occurrences |
+| One-off learning | `insights/` | Single occurrence, worth remembering |
+| Choice made | `decisions/` | Committed action with tradeoffs |
+
+## Conflict Resolution
+- If entity fits two categories, use the **more specific** one (e.g., person > company employee)
+- meetings/ pages may reference people/ and projects/ but the meeting itself lives in meetings/
+- When an idea gains a timeline and deliverables, migrate from ideas/ → projects/
+- When a pattern is acted upon, create a decisions/ entry and link back

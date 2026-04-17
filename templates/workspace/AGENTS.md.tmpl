@@ -66,6 +66,13 @@ After FORGE work completes, {{AGENT_NAME}} must:
 2. Record in daily log: `⚒️ FORGE [repo] N new commits:` format
 3. Include commit hash + changed files in completion report to user
 
+### Quick-Fire Coding (Squire 패턴)
+**트리거**: 1-sentence concrete task ("이거 고쳐", "~ 버그 수정", "~ 추가해줘")
+→ 즉시 sessions_spawn로 coding agent 스폰, 계획 스킵, 바로 실행
+→ 완료 시 결과 + diff 요약 보고
+
+**판단**: 1문장+구체적 = quick-fire | 모호하거나 아키텍처 변경 = FORGE 경로
+
 ---
 
 ## Eve Plan Review (MANDATORY — before FORGE spawn)
@@ -187,6 +194,19 @@ Sub-agents MUST follow `MEMORY.md` § Memory Protocol:
 - Spawning without checking native tools first
 
 ---
+
+## Model-Adaptive Behavior (Auto-applied)
+When running on GPT/Codex: Act first, explain after. Use tools proactively.
+When running on Claude: Make only requested changes. Execute every step in order.
+
+## DocFS First for Docs-Heavy Work (MANDATORY)
+config/API/docs questions → check DocFS or vendor docs first before answering.
+
+## Blueprinter — Technical Diagrams
+**트리거**: "다이어그램", "아키텍처 그림", "blueprint" → HTML/CSS flat blueprint → headless PNG render.
+
+## Decision Council
+**트리거**: "카운슬", "검토해줘", "A vs B" → Multi-advisor peer review → synthesized recommendation.
 
 ## File Path Rule (MANDATORY)
 **Never use `~/` in write/edit/exec tools.**

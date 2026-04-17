@@ -1,0 +1,59 @@
+#!/usr/bin/env python3
+"""Scan agent session logs → extract chat signals per day.
+Output: data/chat-signals/YYYY-MM-DD_<session-id>.json
+"""
+import json, sys
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
+ROOT = Path("{{PERSONAL_KB_ROOT}}/data")
+CHAT_DIR = ROOT / "chat-signals"
+CHAT_DIR.mkdir(parents=True, exist_ok=True)
+AGENTS_DIR = Path("{{OPENCLAW_PATH}}/agents")
+KST = timezone(timedelta(hours=9))
+TODAY = datetime.now(KST).strftime("%Y-%m-%d")
+CUTOFF_H = 48
+MAX_TEXT = 400
+
+def scan_sessions():
+    results = []
+    if not AGENTS_DIR.exists():
+        return results
+    for agent_dir in AGENTS_DIR.iterdir():
+        if not agent_dir.is_dir():
+            continue
+        sessions_dir = agent_dir / "sessions"
+        if not sessions_dir.exists():
+            continue
+        for sf in sorted(sessions_dir.glob("*.jsonl"))[-20:]:
+            try:
+                lines = sf.read_text().strip().split("\n")
+                messages = []
+                for line in lines:
+                    obj = json.loads(line)
+                    if obj.get("role") in ("user", "assistant"):
+                        text = (obj.get("content") or "")[:MAX_TEXT]
+                        if text:
+                            messages.append({"role": obj["role"], "text": text})
+                if messages:
+                    results.append({
+                        "session_id": sf.stem,
+                        "agent": agent_dir.name,
+                        "date": TODAY,
+                        "message_count": len(messages),
+                        "messages": messages[:50],
+                        "summary": f"{agent_dir.name} session with {len(messages)} messages"
+                    })
+            except Exception:
+                continue
+    return results
+
+def main():
+    signals = scan_sessions()
+    for sig in signals:
+        out = CHAT_DIR / f"{TODAY}_{sig['session_id'][:12]}.json"
+        out.write_text(json.dumps(sig, ensure_ascii=False, indent=2))
+    print(f"Wrote {len(signals)} chat signals for {TODAY}")
+
+if __name__ == "__main__":
+    main()

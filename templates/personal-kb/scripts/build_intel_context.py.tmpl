@@ -1,0 +1,88 @@
+#!/usr/bin/env python3
+"""Build compact context JSON for the intel agent nightly run.
+Reads: daily-snapshots, merged-signals (normalized), identity-state, wiki/_index.md.
+Output: /tmp/personalkb-night-context.json
+"""
+import json, sys
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
+ROOT = Path("{{PERSONAL_KB_ROOT}}")
+DATA = ROOT / "data"
+WIKI = ROOT / "wiki"
+OUTPUT = Path("/tmp/personalkb-night-context.json")
+KST = timezone(timedelta(hours=9))
+TODAY = datetime.now(KST).strftime("%Y-%m-%d")
+MAX_SIGNAL_LINES = 200
+MAX_SNAPSHOT_CHARS = 4000
+
+
+def load_json_safe(path: Path) -> dict | list | None:
+    try:
+        return json.loads(path.read_text())
+    except Exception:
+        return None
+
+
+def latest_snapshot() -> dict:
+    snap_dir = DATA / "daily-snapshots"
+    if not snap_dir.exists():
+        return {}
+    files = sorted(snap_dir.glob("*.json"))
+    if not files:
+        return {}
+    data = load_json_safe(files[-1])
+    if isinstance(data, dict):
+        # Truncate large fields
+        for k, v in data.items():
+            if isinstance(v, str) and len(v) > MAX_SNAPSHOT_CHARS:
+                data[k] = v[:MAX_SNAPSHOT_CHARS] + "…"
+    return data or {}
+
+
+def load_normalized() -> list[dict]:
+    norm = DATA / "normalized" / f"{TODAY}.jsonl"
+    if not norm.exists():
+        return []
+    rows = []
+    for line in norm.read_text().strip().split("\n")[:MAX_SIGNAL_LINES]:
+        try:
+            rows.append(json.loads(line))
+        except Exception:
+            continue
+    return rows
+
+
+def load_identity_state() -> dict:
+    path = DATA / "identity-state.json"
+    return load_json_safe(path) or {}
+
+
+def load_wiki_index() -> str:
+    idx = WIKI / "_index.md"
+    if idx.exists():
+        return idx.read_text()[:3000]
+    # fallback: list wiki pages
+    if WIKI.exists():
+        pages = sorted(p.name for p in WIKI.glob("*.md"))[:60]
+        return "\n".join(pages)
+    return ""
+
+
+def main():
+    ctx = {
+        "generated_at": datetime.now(KST).isoformat(),
+        "date": TODAY,
+        "snapshot": latest_snapshot(),
+        "signals": load_normalized(),
+        "identity": load_identity_state(),
+        "wiki_index": load_wiki_index(),
+        "signal_count": 0,
+    }
+    ctx["signal_count"] = len(ctx["signals"])
+    OUTPUT.write_text(json.dumps(ctx, ensure_ascii=False, indent=2))
+    print(f"Intel context: {ctx['signal_count']} signals, snapshot keys={list(ctx['snapshot'].keys())}")
+
+
+if __name__ == "__main__":
+    main()

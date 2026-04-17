@@ -1,0 +1,76 @@
+#!/usr/bin/env python3
+"""Read calendar sources (iCal / JSON) → output daily schedule signals.
+Output: data/schedule-signals/YYYY-MM-DD.json
+"""
+import json, re, sys
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
+ROOT = Path("{{PERSONAL_KB_ROOT}}/data")
+SCHEDULE_DIR = ROOT / "schedule-signals"
+SCHEDULE_DIR.mkdir(parents=True, exist_ok=True)
+CALENDAR_DIR = Path("{{PERSONAL_KB_ROOT}}/sources/calendars")
+KST = timezone(timedelta(hours=9))
+TODAY = datetime.now(KST).strftime("%Y-%m-%d")
+
+
+def parse_ical_events(text: str, target_date: str) -> list[dict]:
+    """Minimal iCal VEVENT parser — extracts events matching target_date."""
+    events = []
+    blocks = re.split(r"BEGIN:VEVENT", text)[1:]
+    for block in blocks:
+        def _field(name: str) -> str:
+            m = re.search(rf"{name}[^:]*:(.*)", block)
+            return m.group(1).strip() if m else ""
+
+        dtstart = _field("DTSTART")
+        # Accept dates like 20260417T090000Z or 2026-04-17
+        date_part = dtstart[:8] if "T" in dtstart else dtstart.replace("-", "")[:8]
+        if date_part != target_date.replace("-", ""):
+            continue
+        events.append({
+            "title": _field("SUMMARY") or "(untitled)",
+            "time": dtstart,
+            "participants": [p.strip() for p in _field("ATTENDEE").split(",") if p.strip()],
+            "location": _field("LOCATION") or None,
+        })
+    return events
+
+
+def parse_json_events(path: Path, target_date: str) -> list[dict]:
+    """Read a JSON array of events, filter by date prefix."""
+    try:
+        data = json.loads(path.read_text())
+    except Exception:
+        return []
+    out = []
+    for ev in (data if isinstance(data, list) else data.get("events", [])):
+        ts = ev.get("start") or ev.get("time") or ""
+        if ts[:10] == target_date:
+            out.append({
+                "title": ev.get("title", "(untitled)"),
+                "time": ts,
+                "participants": ev.get("participants", []),
+                "location": ev.get("location"),
+            })
+    return out
+
+
+def main():
+    all_events: list[dict] = []
+
+    if CALENDAR_DIR.exists():
+        for f in CALENDAR_DIR.iterdir():
+            if f.suffix == ".ics":
+                all_events.extend(parse_ical_events(f.read_text(errors="replace"), TODAY))
+            elif f.suffix == ".json":
+                all_events.extend(parse_json_events(f, TODAY))
+
+    payload = {"date": TODAY, "event_count": len(all_events), "events": all_events}
+    out = SCHEDULE_DIR / f"{TODAY}.json"
+    out.write_text(json.dumps(payload, ensure_ascii=False, indent=2))
+    print(f"Schedule signals: {len(all_events)} events for {TODAY}")
+
+
+if __name__ == "__main__":
+    main()

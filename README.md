@@ -24,6 +24,11 @@ The setup wizard will ask you to choose a runtime:
 - **Compound Knowledge**: 코딩 경험 자동 축적 (confidence decay + cross-project)
 - **Verify Loop**: Automatic implementation verification
 - **Tracer Agent**: Evidence-based bug causal tracking
+- **Knowledge Trust Layer**: Wiki pages with `explored` + `bias_check` metadata for confidence tracking
+- **Personal KB Pipeline**: Full signal → normalized → intel → wiki automated knowledge flow
+- **Runtime Contract**: Model-adaptive behavior (GPT/Codex vs Claude) for consistent quality
+- **Quick-Fire Coding**: 1-sentence task → instant coding agent spawn, no planning overhead
+- **Meta Harness Observer**: Self-monitoring layer for agent routing and performance
 
 ## Hermes Quick Start
 
@@ -74,6 +79,23 @@ arete start
 ```
 
 Runs on `http://localhost:3000` (Next.js dev server). Requires `VAULT_PATH` pointing to your Obsidian vault.
+
+## Personal KB Pipeline
+
+Automated knowledge building from raw signals to actionable intelligence:
+
+```
+Signals (chat/meeting/schedule/voice)
+  → build_normalized.py (unified daily JSONL)
+  → Intel Agent (nightly analysis → intel/YYYY-MM-DD.json)
+  → Wiki Compiler (auto wiki pages with explored/bias_check)
+  → Quality Gate (wiki health check)
+  → Pre-brief (meeting prep dossiers)
+  → Morning Direction (actionable daily brief)
+  → Evening Close (daily wrap + open loop tracking)
+```
+
+Each wiki page carries `explored` (discovery confidence) and `bias_check` (verification status) metadata, forming a **Knowledge Trust Layer** that prevents stale or unverified information from reaching decision points.
 
 ## Architecture
 

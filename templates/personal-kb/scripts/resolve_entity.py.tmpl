@@ -1,0 +1,71 @@
+#!/usr/bin/env python3
+"""Resolve entity name to canonical slug.
+Usage: python resolve_entity.py --name "Sam Altman"
+Checks data/brain/entities.jsonl + aliases.jsonl.
+Returns canonical slug or prints "new" if unknown.
+"""
+import argparse, json, re, sys, unicodedata
+from pathlib import Path
+
+ROOT = Path("{{PERSONAL_KB_ROOT}}/data/brain")
+ENTITIES_FILE = ROOT / "entities.jsonl"
+ALIASES_FILE = ROOT / "aliases.jsonl"
+
+
+def normalize(name: str) -> str:
+    """Lowercase, strip accents, collapse whitespace, remove punctuation."""
+    s = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode()
+    s = re.sub(r"[^\w\s-]", "", s.lower())
+    return re.sub(r"\s+", " ", s).strip()
+
+
+def slugify(name: str) -> str:
+    return normalize(name).replace(" ", "-")
+
+
+def load_jsonl(path: Path) -> list[dict]:
+    if not path.exists():
+        return []
+    rows = []
+    for line in path.read_text().strip().split("\n"):
+        if line.strip():
+            try:
+                rows.append(json.loads(line))
+            except Exception:
+                continue
+    return rows
+
+
+def resolve(candidate: str) -> str:
+    """Return canonical slug or 'new'."""
+    norm = normalize(candidate)
+    slug_candidate = slugify(candidate)
+
+    # Check aliases first (alias → slug mapping)
+    for row in load_jsonl(ALIASES_FILE):
+        alias = row.get("alias", "")
+        if normalize(alias) == norm:
+            return row.get("slug", slug_candidate)
+
+    # Check entities directly
+    for row in load_jsonl(ENTITIES_FILE):
+        if row.get("slug") == slug_candidate:
+            return row["slug"]
+        for a in row.get("aliases", []):
+            if normalize(a) == norm:
+                return row["slug"]
+
+    return "new"
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Resolve entity to canonical slug")
+    parser.add_argument("--name", required=True, help="Entity name candidate")
+    args = parser.parse_args()
+
+    result = resolve(args.name)
+    print(result)
+
+
+if __name__ == "__main__":
+    main()

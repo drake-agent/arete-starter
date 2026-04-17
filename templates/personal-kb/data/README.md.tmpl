@@ -1,0 +1,39 @@
+# Data Directory Structure
+
+```
+data/
+├── chat-signals/        — Chat session signal extracts
+├── meeting-signals/     — Meeting transcript → structured data
+├── schedule-signals/    — Calendar/schedule events
+├── normalized/          — Unified daily JSONL (all signals merged)
+├── intel/               — Nightly analysis output (JSON)
+├── pre-brief/           — Morning meeting prep dossiers
+├── daily-snapshots/     — Daily direction snapshots
+├── weekly-snapshots/    — Weekly synthesis
+├── action-graphs/       — Meeting → action nodes
+├── merged-signals/      — Rolling merged signals
+├── identity-state/      — Personality/pattern state tracking
+├── brain/               — entities.jsonl + aliases.jsonl (entity registry)
+├── quality/             — Wiki quality gate reports
+├── drift/               — Drift detection logs
+├── voice-inbox/         — Voice memo inputs
+└── saju-filter/         — Optional saju monthly filters
+```
+
+## Signal Flow
+1. Raw signals land in `chat-signals/`, `meeting-signals/`, `schedule-signals/`, `voice-inbox/`
+2. Normalized into `normalized/YYYY-MM-DD.jsonl` (one line per signal)
+3. Merged into `merged-signals/` for rolling state
+4. Nightly intel agent reads merged → produces `intel/YYYY-MM-DD.json`
+5. Wiki compiler reads intel → updates wiki pages
+6. Morning agent reads intel + pre-brief + schedule → `daily-snapshots/`
+7. Evening agent reads daily snapshot + signals → evening close
+8. Weekly synthesis aggregates daily snapshots → `weekly-snapshots/`
+
+## Entity Registry (`brain/`)
+- `entities.jsonl`: one JSON object per line — `{"id", "slug", "category", "name", "created_at"}`
+- `aliases.jsonl`: one JSON object per line — `{"alias", "entity_id"}`
+
+## Quality & Drift
+- `quality/`: wiki quality gate reports (explored ratio, bias check coverage, citation completeness)
+- `drift/`: detects when wiki compiled truth diverges from recent signals

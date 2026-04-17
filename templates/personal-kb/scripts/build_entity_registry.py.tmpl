@@ -1,0 +1,69 @@
+#!/usr/bin/env python3
+"""Build entity and alias registries from wiki frontmatter.
+
+Scans markdown pages under {{PERSONAL_KB_ROOT}}/wiki, extracts simple frontmatter
+fields, and writes entities.jsonl plus aliases.jsonl into data/brain/.
+"""
+from __future__ import annotations
+
+import json
+from pathlib import Path
+import re
+
+ROOT = Path("{{PERSONAL_KB_ROOT}}")
+WIKI = ROOT / "wiki"
+FRONTMATTER_RE = re.compile(r"^---\n(.*?)\n---\n", re.S)
+
+
+def parse_frontmatter(text: str) -> dict:
+    match = FRONTMATTER_RE.match(text)
+    if not match:
+        return {}
+    data = {}
+    for line in match.group(1).splitlines():
+        if ":" not in line:
+            continue
+        key, value = line.split(":", 1)
+        key = key.strip()
+        value = value.strip().strip('"')
+        if value.startswith("[") and value.endswith("]"):
+            value = [v.strip().strip('"\'') for v in value[1:-1].split(",") if v.strip()]
+        data[key] = value
+    return data
+
+
+def main() -> int:
+    entities = []
+    aliases = []
+    for path in sorted(WIKI.rglob("*.md")):
+        if path.name in {"RESOLVER.md", "_index.md", "_changelog.md", "schema.md"}:
+            continue
+        if path.parent == WIKI:
+            continue
+        fm = parse_frontmatter(path.read_text(encoding="utf-8"))
+        slug = path.stem
+        entity = {
+            "slug": slug,
+            "title": fm.get("title", slug.replace("-", " ")),
+            "type": fm.get("type", path.parent.name.rstrip("s")),
+            "aliases": fm.get("aliases", []),
+            "path": str(path.relative_to(ROOT)),
+            "updated_at": fm.get("updated_at", ""),
+        }
+        entities.append(entity)
+        for alias in entity["aliases"]:
+            aliases.append({"alias": alias, "slug": slug, "path": entity["path"]})
+
+    data_dir = ROOT / "data" / "brain"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    with (data_dir / "entities.jsonl").open("w", encoding="utf-8") as f:
+        for row in entities:
+            f.write(json.dumps(row, ensure_ascii=False) + "\n")
+    with (data_dir / "aliases.jsonl").open("w", encoding="utf-8") as f:
+        for row in aliases:
+            f.write(json.dumps(row, ensure_ascii=False) + "\n")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

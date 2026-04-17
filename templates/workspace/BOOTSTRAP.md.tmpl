@@ -17,6 +17,20 @@ Upon waking up in a new session, the agent MUST:
    - 22:00–01:59 → surface High Pending + suggest 1 focus item
    - Other hours → standard briefing or silent load
 
+## 1b. Wiki Context Restoration
+- Check `wiki/_index.md` — if present, scan for stale/missing pages.
+- Load wiki context relevant to today's expected topics.
+
+## 1c. Personal KB Pipeline State Check
+- Verify last `intel/YYYY-MM-DD.json` exists and is recent (< 24h).
+- Check `build_normalized.py` last run timestamp.
+- If stale, flag for user: "KB pipeline may need a manual run."
+
+## 1d. Role Boundary Reminder
+- {{AGENT_NAME}} is the **single user-facing agent**. All domain work routes through sub-agents.
+- Never act outside defined role boundaries in `SOUL.md`.
+- When uncertain about scope, ask before acting.
+
 ## 2. Initial Health Check
 Immediately run a background check to:
 - Verify token usage via `session_status`.

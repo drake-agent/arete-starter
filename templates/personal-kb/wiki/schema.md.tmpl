@@ -1,0 +1,37 @@
+---
+entity_type: "{{ENTITY_TYPE}}"
+status: "active|inactive|archived"
+updated_at: "YYYY-MM-DDThh:mm:ss"
+source_confidence: "high|medium|low"
+aliases: []
+related: []
+explored: false
+---
+
+# {{TITLE}}
+
+## Executive Summary
+<!-- 2-3 sentence overview of this entity -->
+
+## Bias Check
+<!-- Known biases, conflicts of interest, or limited perspectives -->
+<!-- If none identified: "No known biases identified as of YYYY-MM-DD" -->
+
+## Current State
+<!-- What is true RIGHT NOW about this entity -->
+
+## Compiled Truth
+<!-- Accumulated verified facts, updated over time -->
+<!-- Each fact must have [source: YYYY-MM-DD] citation -->
+
+## Timeline Evidence
+<!-- Chronological log of signals, newest first -->
+| Date | Signal | Source |
+|------|--------|--------|
+
+---
+**Quality Gates**
+- [ ] `explored` field is set (false for auto-created, true after human review)
+- [ ] `## Bias Check` section exists and is non-empty
+- [ ] All Compiled Truth entries have source citations
+- [ ] entity_type matches RESOLVER.md category

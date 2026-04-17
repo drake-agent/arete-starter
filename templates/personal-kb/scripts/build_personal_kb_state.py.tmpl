@@ -1,0 +1,90 @@
+#!/usr/bin/env python3
+"""Aggregate Personal KB stats → data/kb-state.json.
+Counts: signals per type, wiki pages, stale pages (>14d), pipeline timestamps.
+"""
+import json, time, sys
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
+ROOT = Path("{{PERSONAL_KB_ROOT}}")
+DATA = ROOT / "data"
+WIKI = ROOT / "wiki"
+OUTPUT = DATA / "kb-state.json"
+DATA.mkdir(parents=True, exist_ok=True)
+KST = timezone(timedelta(hours=9))
+NOW = datetime.now(KST)
+STALE_DAYS = 14
+
+
+def count_files(directory: Path, pattern: str = "*") -> int:
+    if not directory.exists():
+        return 0
+    return sum(1 for _ in directory.glob(pattern))
+
+
+def last_modified(directory: Path) -> str | None:
+    if not directory.exists():
+        return None
+    files = list(directory.iterdir())
+    if not files:
+        return None
+    newest = max(files, key=lambda f: f.stat().st_mtime)
+    ts = datetime.fromtimestamp(newest.stat().st_mtime, tz=KST)
+    return ts.isoformat()
+
+
+def count_stale_wiki_pages() -> int:
+    if not WIKI.exists():
+        return 0
+    cutoff = time.time() - (STALE_DAYS * 86400)
+    count = 0
+    for md in WIKI.rglob("*.md"):
+        if md.name.startswith("_"):
+            continue
+        if md.stat().st_mtime < cutoff:
+            count += 1
+    return count
+
+
+def wiki_page_count() -> int:
+    if not WIKI.exists():
+        return 0
+    return sum(1 for p in WIKI.rglob("*.md") if not p.name.startswith("_"))
+
+
+SIGNAL_TYPES = [
+    "chat-signals",
+    "meeting-signals",
+    "schedule-signals",
+    "voice-inbox",
+    "normalized",
+    "action-graphs",
+]
+
+
+def main():
+    signal_counts = {}
+    pipeline_timestamps = {}
+
+    for st in SIGNAL_TYPES:
+        d = DATA / st
+        signal_counts[st] = count_files(d)
+        pipeline_timestamps[st] = last_modified(d)
+
+    state = {
+        "generated_at": NOW.isoformat(),
+        "signal_counts": signal_counts,
+        "wiki_pages": wiki_page_count(),
+        "stale_pages": count_stale_wiki_pages(),
+        "stale_threshold_days": STALE_DAYS,
+        "pipeline_last_run": pipeline_timestamps,
+        "entities": count_files(DATA / "brain", "*.jsonl"),
+    }
+
+    OUTPUT.write_text(json.dumps(state, ensure_ascii=False, indent=2))
+    print(f"KB state: {state['wiki_pages']} wiki pages, {state['stale_pages']} stale, "
+          f"signals={sum(signal_counts.values())}")
+
+
+if __name__ == "__main__":
+    main()

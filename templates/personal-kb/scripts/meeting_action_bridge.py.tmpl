@@ -1,0 +1,87 @@
+#!/usr/bin/env python3
+"""Parse meeting transcripts or meeting-signals JSON → action-graph nodes.
+Fields: title, owner, deadline, blocker, dependency, confidence, source.
+Output: data/action-graphs/YYYY-MM-DD_<hash>.json
+"""
+import hashlib, json, re, sys
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
+ROOT = Path("{{PERSONAL_KB_ROOT}}/data")
+MEETING_DIR = ROOT / "meeting-signals"
+TRANSCRIPT_DIR = Path("{{PERSONAL_KB_ROOT}}/sources/transcripts")
+ACTION_DIR = ROOT / "action-graphs"
+ACTION_DIR.mkdir(parents=True, exist_ok=True)
+KST = timezone(timedelta(hours=9))
+TODAY = datetime.now(KST).strftime("%Y-%m-%d")
+
+# Regex patterns for action extraction
+ACTION_PATTERNS = [
+    re.compile(r"(?:TODO|ACTION|TASK)[:\s]+(.+)", re.IGNORECASE),
+    re.compile(r"\[action\]\s*(.+)", re.IGNORECASE),
+    re.compile(r"→\s*(.+)"),
+    re.compile(r"- \[ \]\s*(.+)"),
+]
+OWNER_RE = re.compile(r"@(\w+)")
+DEADLINE_RE = re.compile(r"(?:by|due|deadline)[:\s]*([\d/\-]+|\w+ \d+)", re.IGNORECASE)
+
+
+def extract_actions_from_text(text: str, source: str) -> list[dict]:
+    actions = []
+    for line in text.split("\n"):
+        line = line.strip()
+        for pat in ACTION_PATTERNS:
+            m = pat.search(line)
+            if m:
+                raw = m.group(1).strip()
+                owner_m = OWNER_RE.search(raw)
+                deadline_m = DEADLINE_RE.search(raw)
+                actions.append({
+                    "title": raw[:200],
+                    "owner": owner_m.group(1) if owner_m else None,
+                    "deadline": deadline_m.group(1) if deadline_m else None,
+                    "blocker": None,
+                    "dependency": None,
+                    "confidence": 0.7,
+                    "source": source,
+                })
+                break
+    return actions
+
+
+def load_meeting_signals() -> list[dict]:
+    actions = []
+    if MEETING_DIR.exists():
+        for f in sorted(MEETING_DIR.glob(f"{TODAY}*.json")):
+            data = json.loads(f.read_text())
+            items = data if isinstance(data, list) else [data]
+            for item in items:
+                text = item.get("transcript") or item.get("summary") or ""
+                actions.extend(extract_actions_from_text(text, f"meeting-signal:{f.stem}"))
+    return actions
+
+
+def load_transcripts() -> list[dict]:
+    actions = []
+    if TRANSCRIPT_DIR.exists():
+        for f in sorted(TRANSCRIPT_DIR.glob("*.txt")) + sorted(TRANSCRIPT_DIR.glob("*.md")):
+            if TODAY.replace("-", "") in f.name or TODAY in f.name:
+                actions.extend(extract_actions_from_text(f.read_text(), f"transcript:{f.stem}"))
+    return actions
+
+
+def main():
+    all_actions = load_meeting_signals() + load_transcripts()
+    if not all_actions:
+        print("No actions found for today.")
+        return
+
+    h = hashlib.sha256(json.dumps(all_actions, sort_keys=True).encode()).hexdigest()[:10]
+    out = ACTION_DIR / f"{TODAY}_{h}.json"
+    payload = {"date": TODAY, "action_count": len(all_actions), "actions": all_actions}
+    out.write_text(json.dumps(payload, ensure_ascii=False, indent=2))
+    print(f"Action bridge: {len(all_actions)} actions → {out.name}")
+
+
+if __name__ == "__main__":
+    main()
